@@ -578,7 +578,7 @@ export class XbridgesEngine {
       const ts = this.sampleTimeOf(b);
       if (ts > 0) {
         // Sample hits lie on the absolute grid t = n*Ts: first hit is the smallest n*Ts >= startTime (1e-9 tolerance).
-        const n0 = Math.ceil(startTime / ts - 1e-6);
+        const n0 = Math.ceil(startTime / ts - Math.max(1e-6, 64 * Number.EPSILON * Math.abs(startTime / ts)));
         const firstHit = n0 * ts;
         b.hitIndex = n0;
         b.nextTick = firstHit;

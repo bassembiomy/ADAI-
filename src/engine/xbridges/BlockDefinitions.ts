@@ -416,7 +416,7 @@ const svpwmGateCompare = (ins: any[], p: any, time: number): { t: number; da: nu
   const T1 = Number(ins[1]);
   const T2 = Number(ins[2]);
   const T0 = Number(ins[3]);
-  const tRel = time % Ts;
+  const tRel = Ts > 0 ? absCarrierPhase(time, 1 / Ts) * Ts : time % Ts;
   const t = tRel > Ts / 2 ? Ts - tRel : tRel;
   let da = 0, db = 0, dc = 0;
   const t0_4 = T0 / 4;
@@ -433,22 +433,27 @@ const svpwmGateCompare = (ins: any[], p: any, time: number): { t: number; da: nu
   return { t, da, db, dc };
 };
 
+/** Carrier phase frac(f*t) from absolute time, exact when t is a whole number of periods: t is split as k/f + r. */
+const absCarrierPhase = (time: number, freq: number): number => {
+  const k = Math.floor(freq * time);
+  let r = time - k / freq;
+  // Large times: t itself carries an error of up to ulp(t)/2, so r is snapped to the decimal grid just above that error
+  // (a step on that grid keeps its exact phase, e.g. a duty tie); below 1e5 s the grid is finer than any step and unused.
+  const q = Math.pow(10, Math.ceil(Math.log10(64 * Number.EPSILON * Math.abs(time))));
+  if (q >= 1e-9) r = Math.round(r / q) * q;
+  // Round-off of f*r (about 1e-16) is removed at 1e-12 so that a duty tying with the carrier decides the same at any start.
+  const ph = Math.round(freq * r * 1e12) / 1e12;
+  const w = ph - Math.floor(ph);
+  return w >= 1 ? 0 : w;
+};
+
 /** PWM Generator: carrier phase accumulated from the committed state (pure; the caller commits the returned phase). */
 const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: number; carrier: number; phase: number } => {
-  const freq = Number(p.frequency) || 50;
+  const freq = Number(p.frequency);
   const duty = Math.max(0, Math.min(1, Number(ins[0])));
-  let phase = (state && state.phase !== undefined) ? Number(state.phase) : 0;
-  // Only advance the phase when time moved on from the committed state (stage evaluations of one step do not stack).
-  const isNewStep = !state || state.lastTime < 0 || time > state.lastTime + 1e-12;
-  if (isNewStep) {
-    if (state && state.lastTime >= 0) {
-      const dt = time - state.lastTime;
-      // The carrier advances by exactly dt * f cycles; a step that is a whole number of periods leaves the phase unchanged.
-      phase = (phase + ((dt * freq) % 1)) % 1;
-    } else {
-      phase = (time * freq) % 1; // very first call: seed the phase from absolute time
-    }
-  }
+  // An invalid frequency is a block error (never a silent default); the evaluation below never runs on it.
+  if (!(Number.isFinite(freq) && freq > 0)) throw new Error(`PWM_GENERATOR: frequency must be a positive finite number, got ${String(p.frequency)}`);
+  const phase = absCarrierPhase(time, freq);
   let carrier: number;
   switch (p.carrierType) {
     case 'sawtooth': carrier = phase; break;
@@ -463,12 +468,8 @@ const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: numb
 /** Three-phase PWM: normalized references and the carrier phase from the committed state (pure). */
 const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number): { refs: number[]; phase: number; carrier: number } => {
   const freq = Number(p.frequency);
-  let phase: number;
-  if (state && state.lastTime >= 0) {
-    phase = ((state.phase + (time - state.lastTime) * freq) % 1 + 1) % 1;
-  } else {
-    phase = (time * freq) % 1;
-  }
+  if (!(Number.isFinite(freq) && freq > 0)) throw new Error(`THREE_PHASE_PWM: frequency must be a positive finite number, got ${String(p.frequency)}`);
+  const phase = absCarrierPhase(time, freq);
   let refs = ins.map(Number);
   if (p.method === 'Saddle' || p.method === 'SVPWM') {
     const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
@@ -3095,6 +3096,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         let history = [...(state.history || [])];
         let stepCount = state.stepCount || 0;
         let lastSampleTime = state.lastSampleTime || 0;
+        let lastSampleIndex: number | undefined = state.lastSampleIndex;
 
         stepCount++;
 
@@ -3104,7 +3106,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         }
 
         if (pSampleTime > 0) {
-          if (time - lastSampleTime < pSampleTime - 1e-9 && history.length > 0) {
+          // Integer-index grid (sample n at the first time >= n*Ts) with an ulp-scaled tolerance.
+          const tol = 1e-9 + 64 * Number.EPSILON * Math.abs(time);
+          const lastIdx = typeof state.lastSampleIndex === 'number' ? state.lastSampleIndex : Math.floor((lastSampleTime + tol) / pSampleTime);
+          if (history.length > 0 && time < (lastIdx + 1) * pSampleTime - tol) {
             shouldSample = false;
           }
         }
@@ -3143,6 +3148,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
           if (pSampleTime > 0) {
             lastSampleTime = time;
+            lastSampleIndex = Math.floor((time + 1e-9 + 64 * Number.EPSILON * Math.abs(time)) / pSampleTime);
           }
 
           if (pLimitDataPoints && history.length > pBufferSize) {
@@ -3150,7 +3156,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           }
         }
 
-        return { outputs: [], nextState: { history, stepCount, lastSampleTime } };
+        return { outputs: [], nextState: { history, stepCount, lastSampleTime, lastSampleIndex } };
       }
     };
   },
