@@ -6,8 +6,8 @@ import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterK
 import { evaluateParameter } from './parameterEvaluation';
 import * as math from 'mathjs';
 
-/** Tolerance for "sample time reached": 1e-9 absolute for small t, relative for long runs. */
-const hitTolerance = (t: number) => 1e-9 * Math.max(1, Math.abs(t));
+/** Tolerance for "sample time reached": 1e-9 s plus a few dozen ulps of t (floating-point error of t = start + k*h), far below any step. */
+const hitTolerance = (t: number) => 1e-9 + 64 * Number.EPSILON * Math.abs(t);
 
 export class XbridgesEngine {
   private model: XModel;
@@ -578,7 +578,7 @@ export class XbridgesEngine {
       const ts = this.sampleTimeOf(b);
       if (ts > 0) {
         // Sample hits lie on the absolute grid t = n*Ts: first hit is the smallest n*Ts >= startTime (1e-9 tolerance).
-        const n0 = Math.ceil(startTime / ts - 1e-9 * Math.max(1, Math.abs(startTime / ts)));
+        const n0 = Math.ceil(startTime / ts - 1e-6);
         const firstHit = n0 * ts;
         b.hitIndex = n0;
         b.nextTick = firstHit;
