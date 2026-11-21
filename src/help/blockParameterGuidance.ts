@@ -31,7 +31,7 @@ const meanings: Record<string, string> = {
   finalValue: 'Output at and after the configured step time.',
   signs: 'Input sign pattern for Sum: + adds and - subtracts the corresponding input.',
   axis: 'Matrix concatenation axis selecting row or column concatenation in the implemented helper.',
-  diagMode: 'Declared diagonal mode metadata; consult the block behavior for which extraction/construction is actually implemented.',
+  diagMode: 'create builds a diagonal matrix from a vector input; extract returns the main diagonal of a matrix input; a shape that does not fit the mode is a block error.',
   dim: 'Dimension of the square identity matrix to produce.',
   rowStart: 'First row index selected from the input matrix.', rowEnd: 'End row bound selected from the input matrix; follow the block slice convention.',
   colStart: 'First column index selected from the input matrix.', colEnd: 'End column bound selected from the input matrix; follow the block slice convention.',
@@ -124,6 +124,7 @@ const meanings: Record<string, string> = {
   Rr: 'Rotor resistance used by the induction-machine equations.', Lr: 'Rotor inductance used by the induction-machine equations.',
   Lm: 'Mutual/magnetizing inductance linking stator and rotor flux.', J: 'Rotor inertia used in angular acceleration from torque imbalance.',
   v_f_ratio: 'Voltage-to-frequency scaling for the scalar motor command.',
+  base_speed: 'Base speed above which the FLUX_REFERENCE field-weakening mode scales the reference by base_speed/|speed|.',
   boost: 'Added low-frequency voltage boost in scalar control.', rated_f: 'Declared rated frequency in the scalar-controller settings.',
   Kp_speed: 'Proportional gain of the speed loop.', Ki_speed: 'Integral gain of the speed loop.',
   Kp_curr: 'Proportional gain of the current loop.', Ki_curr: 'Integral gain of the current loop.',
@@ -168,7 +169,7 @@ const meanings: Record<string, string> = {
   d: 'Fourth breakpoint of a trapezoidal membership function.', sigma: 'Gaussian membership-function spread.',
   operator: 'Fuzzy antecedent combination operator.', implication: 'Rule implication method for applying firing strength to the consequent.',
   numAntecedents: 'Number of antecedent input ports constructed for the rule.',
-  andMethod: 'Fuzzy AND combination method.', orMethod: 'Declared fuzzy OR method; check the implemented rule evaluation path.',
+  andMethod: 'Fuzzy AND combination method.', orMethod: 'Fuzzy OR (s-norm), max or probor (a+b-ab): combines the antecedents of rules whose operator is OR and aggregates the implied output sets of a Mamdani system.',
   defuzzMethod: 'Method used to convert aggregate membership into a scalar result.',
   defuzzResolution: 'Number of sampled points used in output-universe aggregation/defuzzification.',
   inputMFs: 'Membership-function definitions for each input universe.', outputMFs: 'Membership-function definitions for the output universe.',
@@ -224,7 +225,7 @@ export function getXBlockParameterDescription(typeId: string, name: string): str
   if (name === 'type' && typeId === 'FUZZY_INFERENCE_SYSTEM') return 'Select Mamdani aggregation or the implemented Sugeno consequent calculation.';
   if (name === 'mode' && typeId === 'CLARKE_TRANSFORM') return 'Select amplitude-invariant or the alternate power-normalized Clarke transform.';
   if (name === 'mode' && typeId === 'CFD_DEM_SURROGATE_LEARNER') return 'Training updates coefficients from observed outputs; other modes evaluate the stored surrogate.';
-  if (name === 'mode' && typeId === 'FLUX_REFERENCE') return 'Flux-reference mode metadata; the current factory forwards its configured reference value.';
+  if (name === 'mode' && typeId === 'FLUX_REFERENCE') return 'constant emits value; field_weakening reduces it to value*base_speed/|speed| once |speed| exceeds base_speed.';
   if (name === 'mode' && typeId === 'NUMERIC_REPRESENTATION') return 'Select fixed_point or floating_point representation; unsupported modes report a conversion error.';
   if (name === 'mode') return 'Select the implemented controller combination such as PI, PD or PID.';
   if (name === 'method' && ['THREE_PHASE_PWM'].includes(typeId)) return 'Select SPWM or the implemented Saddle/SVPWM common-mode injection branch.';
