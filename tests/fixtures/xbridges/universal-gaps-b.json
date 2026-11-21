@@ -870,17 +870,9 @@
   "ZERO_SEQUENCE_INJECTION.vc:vec2",
   "ZERO_SEQUENCE_INJECTION.vc:vec3"
  ],
- "XBV-301": [
-  "Mean.in:empty"
- ],
  "U6 undef": [],
  "U6 dims": [],
- "XBV-304": [
-  "DATA_TYPE_CONVERSION.output_type=float16",
-  "DATA_TYPE_CONVERSION.output_type=float64",
-  "NUMERIC_REPRESENTATION.output_type=float16",
-  "NUMERIC_REPRESENTATION.output_type=float64"
- ],
+ "U8 declared value rejected": [],
  "XBV-303": [
   "DISCRETE_TRANSFER_FUNCTION.representation=continuous",
   "LAPLACE_TRANSFORM.representation=discrete",
@@ -891,11 +883,71 @@
   "FLUX_REFERENCE.mode"
  ],
  "XBV-306": [
+  "Diag.diagMode",
+  "DiagExtract.diagMode",
+  "ExtractDiag.diagMode",
   "MatrixDiag.diagMode"
  ],
+ "XBV-309": [
+  "FUZZY_INFERENCE_SYSTEM.orMethod"
+ ],
  "U8 option has no effect (other blocks)": [],
- "U8 unknown value accepted": [],
- "U8 wrong case accepted": [],
+ "XBV-310": [
+  "CFD_DEM_SURROGATE_LEARNER.mode",
+  "CLARKE_TRANSFORM.mode",
+  "Diag.diagMode",
+  "DiagExtract.diagMode",
+  "ExtractDiag.diagMode",
+  "FUZZY_AND.method",
+  "FUZZY_INFERENCE_SYSTEM.andMethod",
+  "FUZZY_INFERENCE_SYSTEM.defuzzMethod",
+  "FUZZY_INFERENCE_SYSTEM.orMethod",
+  "FUZZY_INFERENCE_SYSTEM.type",
+  "FUZZY_OR.method",
+  "FUZZY_RULE.implication",
+  "FUZZY_RULE.operator",
+  "PWM_GENERATOR.carrierType",
+  "THREE_PHASE_PWM.method"
+ ],
+ "XBV-310 wrong case": [
+  "CFD_DEM_SURROGATE_LEARNER.mode=INFERENCE",
+  "CFD_DEM_SURROGATE_LEARNER.mode=TRAINING",
+  "CLARKE_TRANSFORM.mode=AMPLITUDE_INVARIANT",
+  "CLARKE_TRANSFORM.mode=POWER_INVARIANT",
+  "Diag.diagMode=CREATE",
+  "Diag.diagMode=EXTRACT",
+  "DiagExtract.diagMode=CREATE",
+  "DiagExtract.diagMode=EXTRACT",
+  "ExtractDiag.diagMode=CREATE",
+  "ExtractDiag.diagMode=EXTRACT",
+  "FUZZY_AND.method=MIN",
+  "FUZZY_AND.method=PRODUCT",
+  "FUZZY_INFERENCE_SYSTEM.andMethod=MIN",
+  "FUZZY_INFERENCE_SYSTEM.andMethod=PRODUCT",
+  "FUZZY_INFERENCE_SYSTEM.defuzzMethod=BISECTOR",
+  "FUZZY_INFERENCE_SYSTEM.defuzzMethod=CENTROID",
+  "FUZZY_INFERENCE_SYSTEM.defuzzMethod=LOM",
+  "FUZZY_INFERENCE_SYSTEM.defuzzMethod=MOM",
+  "FUZZY_INFERENCE_SYSTEM.defuzzMethod=SOM",
+  "FUZZY_INFERENCE_SYSTEM.orMethod=MAX",
+  "FUZZY_INFERENCE_SYSTEM.orMethod=PROBOR",
+  "FUZZY_INFERENCE_SYSTEM.type=MAMDANI",
+  "FUZZY_INFERENCE_SYSTEM.type=SUGENO",
+  "FUZZY_OR.method=MAX",
+  "FUZZY_OR.method=PROBOR",
+  "FUZZY_RULE.implication=MIN",
+  "FUZZY_RULE.implication=PROD",
+  "FUZZY_RULE.operator=and",
+  "FUZZY_RULE.operator=or",
+  "PWM_GENERATOR.carrierType=INV_SAWTOOTH",
+  "PWM_GENERATOR.carrierType=SAWTOOTH",
+  "PWM_GENERATOR.carrierType=SINE",
+  "PWM_GENERATOR.carrierType=SQUARE",
+  "PWM_GENERATOR.carrierType=TRIANGLE",
+  "THREE_PHASE_PWM.method=SADDLE",
+  "THREE_PHASE_PWM.method=spwm",
+  "THREE_PHASE_PWM.method=svpwm"
+ ],
  "U12 run after reset differs from pristine": [],
  "U12 run changes the node parameters": [],
  "XBV-307": [

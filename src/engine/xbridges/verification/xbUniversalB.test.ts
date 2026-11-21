@@ -43,14 +43,14 @@ const make = (type: string, params: Record<string, unknown> = {}): XBlock => BLO
 
 /** Provisional finding ids of this batch: one root cause each (the planner renumbers when it records them). */
 export const PIN_CAUSE: Record<string, string> = {
-  'XBV-300': 'S2 U6: 44 blocks (field-oriented control, Park/Clarke, fuzzy MFs, robot vacuum, DEM, adaptive filters) coerce a vector, matrix or ragged input with Number() and emit a silent NaN, no dimension diagnostic; BlockDefinitions.ts per-block execute',
-  'XBV-301': 'S3 U6: Mean (declared vector/matrix input) turns the empty vector [] into a silent NaN (0/0) instead of a block error; BlockDefinitions.ts Mean',
+  'XBV-300': 'S2 U6: 44 blocks (field-oriented control, Park/Clarke, fuzzy MFs, robot vacuum, DEM, adaptive filters) coerce a vector, matrix or ragged input with Number() and output NaN with only the generic NUMERICAL_INSTABILITY warning, no dimension diagnostic; BlockDefinitions.ts per-block execute',
   'XBV-302': 'S3 U6: Determinant (non-square input) and Transpose (ragged input) throw instead of reporting a dimension error; BlockDefinitions.ts / VectorUtils.ts',
-  'XBV-303': 'S3 U8: schema declares representation continuous|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION but the factory hard-codes the domain and silently replaces the other value; BlockDefinitions.ts factories',
-  'XBV-304': 'S3 U8: output_type float16 and float64 of DATA_TYPE_CONVERSION and NUMERIC_REPRESENTATION are declared options but fault at run unless the hidden params supportsFloat16/supportsFloat64 are true; BlockDefinitions.ts',
-  'XBV-305': 'S3 U8: FLUX_REFERENCE.mode = field_weakening is declared but identical to constant (code comment: not implemented); BlockDefinitions.ts FLUX_REFERENCE',
-  'XBV-306': 'S3 U8: MatrixDiag.diagMode (create | extract) is ignored, the block decides from the input shape (VectorUtils.diag); BlockDefinitions.ts MatrixDiag',
-  'XBV-307': 'S2 U13: sample hits are scheduled by accumulating nextTick + Ts, so after about 5e5 ticks of h = 0.01 s the rounding error exceeds the 1e-9 tolerance and a hit moves one tick late (integer tick n*Ts expected); XbridgesEngine.ts updateDiscreteStates',
+  'XBV-303': 'S4 U8: parameterSchema lists representation continuous|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION, but the factories fix the domain (as Simulink does) and the panel hides the param, so the schema option list is what is wrong; parameterSchema.ts',
+  'XBV-305': 'S2 U8: FLUX_REFERENCE.mode = field_weakening is declared but identical to constant (code comment: not implemented); BlockDefinitions.ts FLUX_REFERENCE',
+  'XBV-306': 'S2 U8: diagMode (create | extract) of MatrixDiag, Diag, DiagExtract and ExtractDiag is ignored (silent no-op), the block decides from the input shape (VectorUtils.diag); BlockDefinitions.ts MatrixDiag',
+  'XBV-309': 'S2 U8: FUZZY_INFERENCE_SYSTEM.orMethod (max | probor) is stored but never read, so the option is a silent no-op; BlockDefinitions.ts FUZZY_INFERENCE_SYSTEM',
+  'XBV-310': 'S3 U8: 15 panel dropdown enums that are not in parameterSchema (CLARKE mode, CFD_DEM mode, THREE_PHASE_PWM method, PWM carrierType, Diag diagMode, FIS and FUZZY_* methods) accept an unknown or wrong-case value without any PARAMETER_OPTION_INVALID error; add them to parameterSchema.ts',
+  'XBV-307': 'S1 U13 (wrong numbers): sample hits are scheduled by accumulating nextTick + Ts, so after about 5e5 ticks of h = 0.01 s the rounding error exceeds the 1e-9 tolerance and a hit moves one tick late (integer tick n*Ts expected); XbridgesEngine.ts updateDiscreteStates',
   'XBV-308': 'S4 U16: generated C member names are not shortened or hashed, so ids that differ only after the 63rd character give names equal in the first 63 (C99 5.2.4.1); smCIdentifierPolicy is not applied to members; xbCGenerator.ts',
 };
 
@@ -149,9 +149,8 @@ describe('U6: shapes fed to each input', () => {
     }
   }
   it('no exception from execute for any shape', () => pin('XBV-302', failures.throw), 120_000);
-  // Mean declares vector and matrix input: its failure (the empty vector) is a different cause from the Number() coercion of the others.
-  it('no block turns a vector, matrix or ragged input into a silent NaN (the block reports a dimension error instead)', () => pin('XBV-300', failures.nan.filter((k) => !k.startsWith('Mean.'))));
-  it('a block with declared vector input does not turn the empty vector into a silent NaN', () => pin('XBV-301', failures.nan.filter((k) => k.startsWith('Mean.'))));
+  // Mean([]) = NaN is the deliberate behaviour (MATLAB mean([]) = NaN, XBV-051, xbEquations.math.test.ts): not a finding.
+  it('no block turns a vector, matrix or ragged input into a NaN output without a dimension diagnostic', () => pin('XBV-300', failures.nan.filter((k) => k !== 'Mean.in:empty')));
   it('no undefined output for any shape', () => pin('U6 undef', failures.undef));
   it('element-wise blocks broadcast to the input dimensions', () => pin('U6 dims', failures.dims));
 });
@@ -184,11 +183,32 @@ const NOT_OBSERVABLE: Record<string, string> = {
   'PT_DOE_SWEEPER.objective': 'ranks the rows of the Responses bus; a lone block has no Responses input',
 };
 /** Companion parameters that depend on the option value (a numeric type needs the matching mode). */
+// supportsFloat16 / supportsFloat64 are panel params ('whether the selected target permits'): float16 and float64 need them set.
+const TARGET = { supportsFloat16: true, supportsFloat64: true };
 const ctxOf = (key: string, v: string): Record<string, unknown> => (key === 'NUMERIC_REPRESENTATION.output_type'
-  ? { mode: /^(float|boolean)/.test(v) ? 'floating_point' : 'fixed_point' } : CONTEXT[key] ?? {});
+  ? { ...TARGET, mode: /^(float|boolean)/.test(v) ? 'floating_point' : 'fixed_point' }
+  : key === 'DATA_TYPE_CONVERSION.output_type' ? TARGET : CONTEXT[key] ?? {});
 /** Documented, intentional refusals: the data is not shipped (rule: no third-party data in the repository). */
 const isNotShipped = (message: string) => message.includes('is not shipped');
 // A lone block has no sources: the step is 1 ms so that a default sample time of 1 ms is an integer multiple.
+/** Enums with a dropdown in XbridgesPropertiesPanel.tsx (select options) that parameterSchema does not list. */
+const PANEL_ENUMS: EnumParam[] = [
+  { type: 'CFD_DEM_SURROGATE_LEARNER', param: 'mode', options: ['training', 'inference'] },
+  { type: 'CLARKE_TRANSFORM', param: 'mode', options: ['amplitude_invariant', 'power_invariant'] },
+  { type: 'THREE_PHASE_PWM', param: 'method', options: ['SPWM', 'Saddle', 'SVPWM'] },
+  { type: 'FUZZY_DEFUZZIFY', param: 'method', options: ['centroid', 'bisector', 'mom', 'som', 'lom'] },
+  ...['MatrixDiag', 'Diag', 'DiagExtract', 'ExtractDiag'].map((type) => ({ type, param: 'diagMode', options: ['create', 'extract'] })),
+  { type: 'FUZZY_INFERENCE_SYSTEM', param: 'type', options: ['Mamdani', 'Sugeno'] },
+  { type: 'FUZZY_INFERENCE_SYSTEM', param: 'andMethod', options: ['min', 'product'] },
+  { type: 'FUZZY_INFERENCE_SYSTEM', param: 'orMethod', options: ['max', 'probor'] },
+  { type: 'FUZZY_INFERENCE_SYSTEM', param: 'defuzzMethod', options: ['centroid', 'bisector', 'mom', 'som', 'lom'] },
+  { type: 'FUZZY_RULE', param: 'operator', options: ['AND', 'OR'] },
+  { type: 'FUZZY_RULE', param: 'implication', options: ['min', 'prod'] },
+  { type: 'FUZZY_AND', param: 'method', options: ['min', 'product'] },
+  { type: 'FUZZY_OR', param: 'method', options: ['max', 'probor'] },
+  { type: 'PWM_GENERATOR', param: 'carrierType', options: ['triangle', 'sawtooth', 'inv_sawtooth', 'sine', 'square'] },
+];
+for (const e of PANEL_ENUMS) if (!ENUMS.some((x) => x.type === e.type && x.param === e.param)) ENUMS.push(e);
 const oneStep = (type: string, params: Record<string, unknown>) => {
   try {
     const r = runModel(buildModel({ blocks: [{ id: 'u', type, params }], wires: [] }), { solver: 'rk4', dt: 0.001, stopTime: 0.002, probes: [] });
@@ -239,6 +259,8 @@ describe('U8: enumerated parameters', () => {
   const unknownOk: string[] = [];
   const wrongCaseOk: string[] = [];
   const undecided: string[] = [];
+  let unknownChecked = 0;
+  let wrongCaseChecked = 0;
   for (const e of ENUMS) {
     const key = `${e.type}.${e.param}`;
     const ctx = ctxOf(key, e.options[0]);
@@ -272,29 +294,35 @@ describe('U8: enumerated parameters', () => {
     }
     const mentions = (m: string, bad: string) => m.includes(bad) || m.includes(e.param);
     if (!baselineFails) {
+      unknownChecked++;
       const bad = oneStep(e.type, { ...ctx, [e.param]: 'zz_unknown' });
       if (bad.threw !== null || !bad.errors.some((d) => mentions(d.message, 'zz_unknown'))) unknownOk.push(key);
       for (const v of e.options) {
         const w = wrongCase(v);
         if (w === null || e.options.includes(w)) continue;
+        wrongCaseChecked++;
         const r = oneStep(e.type, { ...ctx, [e.param]: w });
         if (r.threw !== null || !r.errors.some((d) => mentions(d.message, w))) wrongCaseOk.push(`${key}=${w}`);
       }
     }
   }
   it('there are enumerated parameters to check', () => {
-    expect(ENUMS.length).toBeGreaterThan(40);
+    expect(ENUMS.length).toBeGreaterThan(55);
+    expect(unknownChecked, 'the unknown-value check must have checked something').toBeGreaterThan(0);
+    expect(wrongCaseChecked, 'the wrong-case check must have checked something').toBeGreaterThan(0);
     if (process.env.XBV_PRINT) appendFileSync(process.env.XBV_PRINT, `${JSON.stringify({ 'U8 undecided (no conclusive context)': undecided.sort() })}\n`);
   });
-  it('every declared value runs without an error', () => pin('XBV-304', rejected));
+  it('every declared value runs without an error', () => pin('U8 declared value rejected', rejected));
   it('the factory keeps every declared value', () => pin('XBV-303', replaced));
   it('at least two declared values of a parameter change the behaviour', () => {
     pin('XBV-305', noEffect.filter((k) => k.startsWith('FLUX_REFERENCE')));
-    pin('XBV-306', noEffect.filter((k) => k.startsWith('MatrixDiag')));
-    pin('U8 option has no effect (other blocks)', noEffect.filter((k) => !k.startsWith('FLUX_REFERENCE') && !k.startsWith('MatrixDiag')));
+    const diag = (k: string) => /^(MatrixDiag|Diag|DiagExtract|ExtractDiag)\./.test(k);
+    pin('XBV-306', noEffect.filter(diag));
+    pin('XBV-309', noEffect.filter((k) => k.startsWith('FUZZY_INFERENCE_SYSTEM.orMethod')));
+    pin('U8 option has no effect (other blocks)', noEffect.filter((k) => !k.startsWith('FLUX_REFERENCE') && !diag(k) && !k.startsWith('FUZZY_INFERENCE_SYSTEM.orMethod')));
   });
-  it('an unknown value gives an error diagnostic that names it', () => pin('U8 unknown value accepted', unknownOk));
-  it('a wrong-case value gives an error diagnostic that names it', () => pin('U8 wrong case accepted', wrongCaseOk));
+  it('an unknown value gives an error diagnostic that names it', () => pin('XBV-310', unknownOk));
+  it('a wrong-case value gives an error diagnostic that names it', () => pin('XBV-310 wrong case', wrongCaseOk));
 });
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -437,8 +465,8 @@ describe('U15: blocks whose port count follows a parameter', () => {
           const ins = b.inputs.map((p) => p.id);
           const outs = b.outputs.map((p) => p.id);
           if (new Set(ins).size !== ins.length || new Set(outs).size !== outs.length) offenders.push(`${id} duplicate port ids`);
-          if (!prevIn.every((x) => ins.includes(x) || n < SIZES[SIZES.indexOf(n) - 1]) && n > 1) offenders.push(`${id} input ids not stable`);
-          if (n > 2 && !prevOut.every((x) => outs.includes(x)) && outs.length >= prevOut.length) offenders.push(`${id} output ids not stable`);
+          if (n > 1 && !prevIn.every((x) => ins.includes(x))) offenders.push(`${id} input ids not stable`);
+          if (n > 1 && !prevOut.every((x) => outs.includes(x))) offenders.push(`${id} output ids not stable`);
           prevIn = ins; prevOut = outs;
           const r = exec(b, b.inputs.map(() => 0.5), b.state, 0);
           if (r.threw !== null) offenders.push(`${id} throws`);
@@ -462,7 +490,7 @@ describe('U15: blocks whose port count follows a parameter', () => {
       if (sumB.inputs.length !== n || r.threw !== null || Math.abs(Number(r.outputs[0]) - expectSum) > 1e-12) offenders.push(`Sum n=${n}`);
       const mux = make('MUX', { numInputs: n });
       const rm = exec(mux, u, mux.state, 0);
-      if (mux.inputs.length !== n || rm.threw !== null || JSON.stringify(rm.outputs[0]) !== JSON.stringify(n === 1 ? u : u)) offenders.push(`MUX n=${n}`);
+      if (mux.inputs.length !== n || rm.threw !== null || JSON.stringify(rm.outputs[0]) !== JSON.stringify(u)) offenders.push(`MUX n=${n}`);
       const demux = make('DEMUX', { numOutputs: n });
       const input = Array.from({ length: 16 }, (_, i) => i + 1);
       const rd = exec(demux, [input], demux.state, 0);
@@ -663,9 +691,7 @@ describe('U16: ids with spaces, unicode, quotes, C keywords and 200 characters',
         try {
           execFileSync('gcc', ['-std=c99', '-fsyntax-only', '-Wall', '-Wextra', '-I', dir, ...g.files.filter((f) => f.name.endsWith('.c')).map((f) => join(dir, f.name))], { stdio: 'pipe' });
         } catch (e) { offenders.push(`${cls}: ${String((e as { stderr?: Buffer }).stderr ?? e).split('\n').find((l) => l.includes('error')) ?? 'gcc failed'}`.replace(dir, '').slice(0, 140)); }
-        const dup = declared(g.files.filter((f) => f.name.endsWith('.h')).map((f) => f.content).join('\n')).map((d) => d.name);
-        // Members of different structs may share a name; a duplicate inside the instance struct is caught by gcc above.
-        void dup;
+        // A duplicate member inside one struct is caught by gcc above.
         // C99 5.2.4.1 / 6.4.2.1: at least the first 63 characters of an internal identifier are significant, so two names
         // that differ only after the 63rd character may denote the same object.
         const names = declared(g.files.filter((f) => f.name.endsWith('.h')).map((f) => f.content).join('\n')).map((d) => d.name);
