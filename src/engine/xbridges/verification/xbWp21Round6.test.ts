@@ -79,3 +79,59 @@ describe('XBV-307: sample hits stay on the grid at large start times', () => {
     }
   }
 });
+
+// XBV-312: Scope sampleTime decimation stays on the grid at large start times (Simulink logs at n*Ts). From start 1e8 s,
+// solver step 0.01, Scope Ts 0.1, 2 s: the same number of samples as from start 0, every gap 0.1 s.
+import { Solvers } from '../Solvers';
+describe('XBV-312: Scope sample-time logging at large start times', () => {
+  const log = (T0: number) => {
+    const e = new XbridgesEngine(buildModel({
+      blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 's', type: 'Scope', params: { sampleTime: 0.1, limitDataPoints: false } }],
+      wires: ['c.out -> s.in1'],
+    }));
+    Solvers.runFixedStep(e, { solver: 'rk4', startTime: T0, stopTime: T0 + 2, fixedStep: 0.01 } as never);
+    expect(e.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    return (e as unknown as { blockMap: Map<string, { state: { history: Array<{ t: number }> } }> }).blockMap.get('s')!.state.history;
+  };
+  it('start 1e8 s logs as many samples as start 0 (at least 20), every gap 0.1 s', () => {
+    const ref = log(0).length;
+    expect(ref).toBeGreaterThanOrEqual(20);
+    const hist = log(1e8);
+    expect(hist.length).toBe(ref);
+    for (let n = 1; n < hist.length; n++) expect(Math.abs(hist[n].t - hist[n - 1].t - 0.1), `gap ${n}`).toBeLessThan(1e-6);
+  });
+});
+
+// XBV-311: the first hit at an on-grid start is never skipped, even at 1e11+ ticks. Ts 1e-4, h 1e-4, starts n*Ts with n near
+// 1.8e11: the discrete integrator of 1 reads Ts after the first step (its first hit is at the start).
+describe('XBV-311: first sample hit at large on-grid start times', () => {
+  it('200 starts near 1.8e11 ticks (Ts 1e-4): y(start + h) - y(start) = Ts for every one', () => {
+    const Ts = 1e-4;
+    const bad: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const T0 = (1.8e11 + i * 7919) * Ts;
+      const r = runModel(buildModel({
+        blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 'i', type: 'INTEGRATOR_DISCRETE', params: { sample_time: Ts } }],
+        wires: ['c.out -> i.u'],
+      }), { solver: 'discrete', dt: Ts, startTime: T0, stopTime: T0 + 2 * Ts, probes: ['i.y'] });
+      const ys = r.signals['i.y'].map(Number);
+      if (Math.abs(ys[1] - ys[0] - Ts) > 1e-9) bad.push(T0);
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
+// XBV-313: the PWM carrier phase is a function of absolute time (Simulink PWM Generator carrier = f(t)), not an accumulated
+// sum. Start 1e8 s is a whole number of carrier periods (f = 1000 Hz), so the gate sequence over 2 periods equals the one
+// from start 0, sample for sample, including the duty-equals-carrier tie (duty 0.3 meets the triangle at phase 0.15).
+describe('XBV-313: PWM gate pattern does not depend on an integer-period start time', () => {
+  for (const duty of [0.3, 0.33]) {
+    it(`duty ${duty}: gates from start 1e8 s equal gates from start 0`, () => {
+      const gates = (T0: number) => runModel(buildModel({
+        blocks: [{ id: 'c', type: 'Constant', params: { value: duty } }, { id: 'p', type: 'PWM_GENERATOR', params: { frequency: 1000, carrierType: 'triangle' } }],
+        wires: ['c.out -> p.duty'],
+      }), { solver: 'discrete', dt: 1e-5, startTime: T0, stopTime: T0 + 0.002, probes: ['p.pwm'] }).signals['p.pwm'].map(Number);
+      expect(gates(1e8)).toEqual(gates(0));
+    });
+  }
+});
