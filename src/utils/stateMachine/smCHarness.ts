@@ -1,3 +1,4 @@
+import { limitCIdentifiersInSource } from './smCIdentifierPolicy';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
@@ -832,7 +833,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
   ].join('\n');
 };
 
-export const renderDifferentialHarness = (
+const renderDifferentialHarnessRaw = (
   ir: SemanticModel,
   steps: readonly DifferentialScenarioStep[],
 ): string => {
@@ -888,6 +889,12 @@ export const renderDifferentialHarness = (
     '',
   ].join('\n');
 };
+
+/** Same identifier mapping as the generated C (smCIdentifierPolicy), so the harness names match the header. */
+export const renderDifferentialHarness = (
+  ir: SemanticModel,
+  steps: readonly DifferentialScenarioStep[],
+): string => limitCIdentifiersInSource(renderDifferentialHarnessRaw(ir, steps));
 
 const parseMap = (
   encoded: string,

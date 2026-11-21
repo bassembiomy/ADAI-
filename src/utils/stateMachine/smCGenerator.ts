@@ -1,3 +1,4 @@
+import { limitCIdentifiersInSource } from './smCIdentifierPolicy';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -1975,8 +1976,16 @@ export const generateCArtifacts = (
   options: CGeneratorOptions = {},
 ): CGeneratorResult =>
   // Only the AUTOSAR platform guards division; Generate C/H output stays byte-identical.
-  withGuardedDivision(options.platform === 'autosar' && modelNeedsGuardedArithmetic(ir), () =>
-    generateCArtifactsUnguarded(ir, options));
+  limitGeneratedIdentifiers(withGuardedDivision(options.platform === 'autosar' && modelNeedsGuardedArithmetic(ir), () =>
+    generateCArtifactsUnguarded(ir, options)));
+
+/** C99 5.2.4.1: one mapping (smCIdentifierPolicy) over every generated C/H file so callers and definitions agree. */
+const limitGeneratedIdentifiers = (result: CGeneratorResult): CGeneratorResult => ({
+  ...result,
+  files: result.files.map((file) => /\.(?:c|h|cpp|ino)$/i.test(file.name)
+    ? { ...file, content: limitCIdentifiersInSource(file.content) }
+    : file),
+});
 
 const generateCArtifactsUnguarded = (
   ir: SemanticModel,
