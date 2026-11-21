@@ -181,6 +181,10 @@ const NOT_OBSERVABLE: Record<string, string> = {
   'LAPLACE_TRANSFORM.mappingType': 'acts only through the DOE_MODEL link read by the engine constructor',
   'Scope.timeRange': 'display window of the viewer, execute has no output',
   'PT_DOE_SWEEPER.objective': 'ranks the rows of the Responses bus; a lone block has no Responses input',
+  // WP-21 U1: field weakening needs a speed input above base_speed and orMethod needs an OR rule; both have dedicated
+  // tests in xbWp21Round6.test.ts ('XBV-305', 'XBV-309').
+  'FLUX_REFERENCE.mode': 'field weakening acts only for |speed| > base_speed; a lone block has speed 0 (xbWp21Round6 XBV-305)',
+  'FUZZY_INFERENCE_SYSTEM.orMethod': 'acts only on rules with operator OR; the default rule base has none (xbWp21Round6 XBV-309)',
 };
 /** Companion parameters that depend on the option value (a numeric type needs the matching mode). */
 // supportsFloat16 / supportsFloat64 are panel params ('whether the selected target permits'): float16 and float64 need them set.
@@ -197,7 +201,7 @@ const PANEL_ENUMS: EnumParam[] = [
   { type: 'CLARKE_TRANSFORM', param: 'mode', options: ['amplitude_invariant', 'power_invariant'] },
   { type: 'THREE_PHASE_PWM', param: 'method', options: ['SPWM', 'Saddle', 'SVPWM'] },
   { type: 'FUZZY_DEFUZZIFY', param: 'method', options: ['centroid', 'bisector', 'mom', 'som', 'lom'] },
-  ...['MatrixDiag', 'Diag', 'DiagExtract', 'ExtractDiag'].map((type) => ({ type, param: 'diagMode', options: ['create', 'extract'] })),
+  // Decision D17 (WP-21 U1): the diagonal blocks follow MATLAB diag (the input shape decides); the diagMode dropdown is removed.
   { type: 'FUZZY_INFERENCE_SYSTEM', param: 'type', options: ['Mamdani', 'Sugeno'] },
   { type: 'FUZZY_INFERENCE_SYSTEM', param: 'andMethod', options: ['min', 'product'] },
   { type: 'FUZZY_INFERENCE_SYSTEM', param: 'orMethod', options: ['max', 'probor'] },
