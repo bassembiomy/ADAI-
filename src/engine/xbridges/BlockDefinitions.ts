@@ -2876,7 +2876,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'Transpose', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.transpose(ins[0])] })
+    execute: (ins) => {
+      try { return { outputs: [VectorUtils.transpose(ins[0])] }; }
+      catch (e: any) { return { outputs: [NaN], error: String(e?.message ?? e) }; }
+    }
   }),
 
   'Inverse': (id) => ({
@@ -2893,7 +2896,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'Determinant', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.determinant(ins[0])] })
+    execute: (ins) => {
+      // MATLAB det: a square matrix, or a scalar (det(5) = 5). A vector, a 1xn / nx1 matrix, a non-square or ragged input is a dimension error.
+      try { return { outputs: [VectorUtils.determinant(ins[0])] }; }
+      catch (e: any) { return { outputs: [NaN], error: String(e?.message ?? e) }; }
+    }
   }),
 
   'MatrixConcat': (id, params) => {
@@ -10413,11 +10420,10 @@ execute: (ins, p, state) => {
                                                                                                                                             equation: 'μ = exp(−(x−c)² / (2σ²))',
                                                                                                                                             description: 'Gaussian membership function. Computes a smooth bell-curve membership grade centered at c with spread σ.',
                                                                                                                                             execute: (ins, p) => {
-                                                                                                                                              const x = Number(ins[0]);
                                                                                                                                               const sigma = Number(p.sigma) || 1;
                                                                                                                                               const c = Number(p.c);
-                                                                                                                                              const mu = Math.exp(-Math.pow(x - c, 2) / (2 * sigma * sigma));
-                                                                                                                                              return { outputs: [mu] };
+                                                                                                                                              // gaussmf is element-wise over its input (Fuzzy Logic Toolbox gaussmf(x, [sigma c]) for a vector x).
+                                                                                                                                              return ewResult([ins[0]], ([x]) => Math.exp(-Math.pow(Number(x) - c, 2) / (2 * sigma * sigma)));
                                                                                                                                             }
                                                                                                                                           }),
 
@@ -10430,11 +10436,10 @@ execute: (ins, p, state) => {
                                                                                                                                               equation: 'μ = 1 / (1 + exp(−a·(x−c)))',
                                                                                                                                               description: 'Sigmoidal membership function. Produces a smooth S-shaped curve with slope a and crossover point c.',
                                                                                                                                               execute: (ins, p) => {
-                                                                                                                                                const x = Number(ins[0]);
                                                                                                                                                 const a = Number(p.a) || 2;
                                                                                                                                                 const c = Number(p.c);
-                                                                                                                                                const mu = 1 / (1 + Math.exp(-a * (x - c)));
-                                                                                                                                                return { outputs: [mu] };
+                                                                                                                                                // sigmf is element-wise over its input (Fuzzy Logic Toolbox sigmf(x, [a c]) for a vector x).
+                                                                                                                                                return ewResult([ins[0]], ([x]) => 1 / (1 + Math.exp(-a * (Number(x) - c))));
                                                                                                                                               }
                                                                                                                                             }),
 
@@ -12945,6 +12950,96 @@ function applyCatalogueText(block: XBlock): XBlock {
 export function effectivePortUnit(block: XBlock, port: XPort): string | undefined {
   if (CATALOGUE_PORT_UNITS[block.type]?.[port.id] === '@angle') return block.params?.angle_unit === 'degrees' ? 'deg' : 'rad';
   return port.unit;
+}
+/**
+ * XBV-300. Inputs with a fixed meaning (the phase currents and voltages of a Clarke / Park transform, motor-control and robot signals,
+ * LMS / neural inputs, DEM particle coordinates) are scalars or the documented vector. Such a block does not broadcast over a vector or
+ * matrix (Simulink would report a dimension mismatch at the port), so a wrong shape is a block error naming the port and the expected
+ * shape, never a NaN output. scalar: a number (a 1x1 array is a scalar, as in Simulink). vector: a number or a flat numeric vector
+ * ([x, y] pose, [v, w] command). pairs: a flat numeric vector of x, y pairs (an even length).
+ */
+type FixedInputShape = 'scalar' | 'vector' | 'pairs';
+const FIXED_SHAPE_INPUTS: Record<string, Record<string, FixedInputShape>> = {
+  AC_MOTOR_PID_CONTROL: { w_ref: 'scalar' },
+  AIR_FRYER_LEARNING_MODEL: { fan_speed: 'scalar', power: 'scalar' },
+  CLARKE_TRANSFORM: { ia: 'scalar', ib: 'scalar' },
+  CURRENT_CONTROLLER_DQ: { id: 'scalar', id_ref: 'scalar', iq: 'scalar', iq_ref: 'scalar' },
+  DEM_BOND_FABRIC: { positions: 'pairs' },
+  FABRIC_HARMONIC_ANALYZER: { dem_positions: 'pairs' },
+  FIELD_ORIENTED_CONTROL: { ia: 'scalar', ib: 'scalar', id_ref: 'scalar', iq_ref: 'scalar', theta: 'scalar' },
+  FIELD_WEAKENING: { id_base: 'scalar', v_mag: 'scalar' },
+  FUZZY_MF_GAUSSMF: { x: 'scalar' },
+  FUZZY_MF_SIGMF: { x: 'scalar' },
+  FUZZY_PID_CONTROLLER: { r: 'scalar', y: 'scalar' },
+  IM_FOC_CONTROL: { ia: 'scalar', ib: 'scalar', theta: 'scalar', w_meas: 'scalar', w_ref: 'scalar' },
+  IM_SCALAR_CONTROL: { w_ref: 'scalar' },
+  INVERSE_CLARKE: { alpha: 'scalar', beta: 'scalar' },
+  INVERSE_PARK: { theta: 'scalar', vd: 'scalar', vq: 'scalar' },
+  LMS_ADAPTIVE_FILTER: { d: 'scalar', x: 'scalar' },
+  MTPA_FW_MANAGER: { te_ref: 'scalar' },
+  NEURAL_NEURON_LEARNING: { target: 'scalar', x1: 'scalar', x2: 'scalar' },
+  PARK_TRANSFORM: { alpha: 'scalar', beta: 'scalar', theta: 'scalar' },
+  ROBOT_VACUUM_COLLISION_AVOID: { theta_est: 'scalar', waypoints: 'vector', x_est: 'scalar', y_est: 'scalar' },
+  ROBOT_VACUUM_COVERAGE_PLANNER: { room_seg: 'scalar' },
+  ROBOT_VACUUM_DIGITAL_TWIN: { vel_cmd: 'vector' },
+  ROBOT_VACUUM_DOCK_BEACON: { x: 'vector', y: 'scalar' },
+  ROBOT_VACUUM_DYNAMICS: { omega_L: 'scalar', omega_R: 'scalar' },
+  ROBOT_VACUUM_FUSION: { theta_odom: 'scalar', x_odom: 'scalar', y_odom: 'scalar' },
+  ROBOT_VACUUM_KINEMATICS: { v_ref: 'scalar', w_ref: 'scalar' },
+  ROBOT_VACUUM_LOCALIZATION: { theta_odom: 'scalar', x_odom: 'scalar', y_odom: 'scalar' },
+  ROBOT_VACUUM_MOTOR_COMMAND: { omega_L: 'scalar', omega_R: 'scalar', v_cmd: 'scalar', w_cmd: 'scalar' },
+  ROBOT_VACUUM_NAV: { battery_level: 'scalar' },
+  ROBOT_VACUUM_OBSTACLE_AVOIDANCE: { target_x: 'scalar', target_y: 'scalar' },
+  ROBOT_VACUUM_ODOMETRY_SENSOR: { enc_L: 'scalar', enc_R: 'scalar' },
+  ROBOT_VACUUM_SENSOR_FUSION_EKF: { theta_odom: 'scalar', theta_true: 'scalar', x_odom: 'vector', x_true: 'vector', y_odom: 'scalar', y_true: 'scalar' },
+  ROBOT_VACUUM_SIDE_BRUSH: { brush_pwm: 'scalar', speed_pwm: 'vector' },
+  ROBOT_VACUUM_SUCTION_PWM: { suction_pwm: 'scalar' },
+  ROBOT_VACUUM_TOPOLOGY_RETURN: { current_room: 'scalar', dock_room: 'scalar' },
+  ROBOT_VACUUM_VELOCITY_PID: { vel_cmd: 'vector' },
+  ROBOT_VACUUM_WHEEL_CONTROL: { omegaL_ref: 'scalar', omegaR_ref: 'scalar', omega_L: 'scalar', omega_R: 'scalar' },
+  ROTOR_POSITION_ESTIMATOR: { ib: 'scalar', va: 'scalar' },
+  SPEED_CONTROLLER: { speed_actual: 'scalar', speed_ref: 'scalar' },
+  SVPWM_CORE: { v_alpha: 'scalar', v_beta: 'scalar' },
+  THREE_PHASE_LOAD: { va: 'scalar', vb: 'scalar', vc: 'scalar' },
+  VF_SLIP_COMP: { iq_actual: 'scalar', w_ref: 'scalar' },
+  VOLTAGE_REFERENCE_GENERATOR: { f: 'scalar' },
+  ZERO_SEQUENCE_INJECTION: { va: 'scalar', vb: 'scalar', vc: 'scalar' },
+};
+const describeShape = (v: unknown): string => {
+  if (!Array.isArray(v)) return typeof v;
+  if (v.length > 0 && v.every((x) => typeof x === 'number')) return `a vector of ${v.length} elements`;
+  if (v.length > 0 && v.every((x) => Array.isArray(x) && x.length === (v[0] as unknown[]).length && x.every((y: unknown) => typeof y === 'number'))) return `a ${v.length}x${(v[0] as unknown[]).length} matrix`;
+  return v.length === 0 ? 'an empty array' : 'a ragged array';
+};
+const fixedShapeMismatch = (value: unknown, shape: FixedInputShape): string | null => {
+  if (!Array.isArray(value)) return null;
+  const flat = value.length > 0 && value.every((x) => typeof x === 'number');
+  if (shape === 'scalar') {
+    if (value.length === 1 && (typeof value[0] === 'number' || (Array.isArray(value[0]) && value[0].length === 1 && typeof value[0][0] === 'number'))) return null;
+    return 'a scalar';
+  }
+  if (shape === 'vector') return flat || (value.length === 1 && Array.isArray(value[0]) && value[0].length === 1) ? null : 'a scalar or a vector';
+  return flat && value.length % 2 === 0 ? null : 'a vector of x, y pairs (an even number of elements)';
+};
+for (const [type, ports] of Object.entries(FIXED_SHAPE_INPUTS)) {
+  const build = BLOCK_LIBRARY[type];
+  if (!build) continue;
+  BLOCK_LIBRARY[type] = (id, params) => {
+    const block = build(id, params);
+    const run = block.execute;
+    block.execute = (ins, p, state, t, ctx) => {
+      for (const [portId, shape] of Object.entries(ports)) {
+        const index = block.inputs.findIndex((port) => port.id === portId);
+        if (index < 0) continue;
+        const expected = fixedShapeMismatch(ins[index], shape);
+        if (expected !== null) {
+          return { outputs: block.outputs.map(() => NaN), error: `${type}: input '${portId}' must be ${expected}, got ${describeShape(ins[index])}.` };
+        }
+      }
+      return run(ins, p, state, t, ctx);
+    };
+    return block;
+  };
 }
 for (const type of Object.keys(BLOCK_LIBRARY)) {
   // Only the types the tables cover are wrapped (the powertrain, lookup and bus factories carry their own text).
