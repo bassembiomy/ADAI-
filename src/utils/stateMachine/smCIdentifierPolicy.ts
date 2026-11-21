@@ -103,3 +103,25 @@ export function allocateExternalIdentifiers(
 
   return result;
 }
+
+/** C99 5.2.4.1 guarantees 63 significant initial characters for internal identifiers. */
+export const C99_SIGNIFICANT_CHARACTERS = 63;
+
+/**
+ * Shortens one identifier to at most 63 characters: a readable prefix plus `_` and 8 hex characters of the
+ * SHA-256 of the full identifier, so identifiers equal in their first 63 characters stay distinct and the result
+ * is deterministic. Identifiers of 63 characters or fewer are returned unchanged.
+ */
+export function limitCIdentifierLength(identifier: string): string {
+  if (identifier.length <= C99_SIGNIFICANT_CHARACTERS) return identifier;
+  const hash = computeContentSha256(identifier).toLowerCase().slice(0, 8);
+  return `${identifier.slice(0, C99_SIGNIFICANT_CHARACTERS - hash.length - 1)}_${hash}`;
+}
+
+/** Applies limitCIdentifierLength to every identifier token of generated C text longer than 63 characters. */
+export function limitCIdentifiersInSource(source: string): string {
+  return source.replace(
+    /(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]{63,}/g,
+    (token) => limitCIdentifierLength(token),
+  );
+}
