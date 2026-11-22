@@ -221,3 +221,37 @@ describe('XBV-318: Generic HIL package compiles with clang -Werror', () => {
     expect(() => execFileSync('clang', ['-std=c99', '-Wall', '-Werror', '-c', '-I.', ...cs], { cwd: dir, stdio: 'pipe' })).not.toThrow();
   }, 120_000);
 });
+
+// XBV-318 rework (verifier): each Generic simulation array is emitted only for the direction that uses it, so every
+// channel combination compiles with gcc and clang -std=c99 -Wall -Wextra -Werror.
+describe('XBV-318: Generic HIL, every channel combination compiles with gcc and clang -Wall -Wextra -Werror', () => {
+  type Ch = { id: string; peripheral: string; direction: 'In' | 'Out'; mapped: boolean };
+  const configs: Record<string, Ch[]> = {
+    'DAC only': [{ id: 'dac', peripheral: 'DAC', direction: 'Out', mapped: true }],
+    'PWM only': [{ id: 'pwm', peripheral: 'PWM', direction: 'Out', mapped: true }],
+    'ADC only': [{ id: 'adc', peripheral: 'ADC', direction: 'In', mapped: true }],
+    'GPIO in + UART': [{ id: 'gi', peripheral: 'GPIO', direction: 'In', mapped: true }, { id: 'u', peripheral: 'UART', direction: 'Out', mapped: true }],
+    'GPIO out only': [{ id: 'go', peripheral: 'GPIO', direction: 'Out', mapped: true }],
+    'unmapped GPIO input': [{ id: 'gi', peripheral: 'GPIO', direction: 'In', mapped: false }],
+    'ADC + DAC': [{ id: 'adc', peripheral: 'ADC', direction: 'In', mapped: true }, { id: 'dac', peripheral: 'DAC', direction: 'Out', mapped: true }],
+  };
+  for (const [label, chans] of Object.entries(configs)) {
+    it(label, () => {
+      const vars = chans.map((c) => ({ id: `v_${c.id}`, name: `v_${c.id}`, type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true }));
+      const r = generateMISRACCode({
+        tickMs: 10,
+        states: [{ id: 'idle', name: 'Idle', x: 0, y: 0, width: 100, height: 60, entry: '', during: '', exit: '', isActive: false, color: '#000', parentId: null, children: [], priority: 1, isParallel: false, regionId: null, autostart: true }],
+        junctions: [], transitions: [], variables: vars,
+        layers: [{ id: 'root', name: 'root', parentStateId: null, decomposition: 'OR', stateIds: ['idle'], transitionIds: [], junctionIds: [] }],
+        safetyMode: false,
+        hilConfig: { enabled: true, target: 'Generic', clockSpeed: 1, commPort: '', baudRate: 115200,
+          channels: chans.map((c, i) => ({ id: c.id, name: c.id, peripheral: c.peripheral, pin: `P${i}`, direction: c.direction, dataType: 'uint16', rangeMin: 0, rangeMax: 1023, scalingFactor: 1, unit: '' })),
+          mappings: chans.filter((c) => c.mapped).map((c) => ({ id: `${c.id}_m`, adiaVarId: `v_${c.id}`, channelId: c.id, direction: c.direction === 'In' ? 'read' : 'write', ...(c.direction === 'Out' ? { safeValue: 0 } : {}) })) },
+      } as never, { includeTestShims: true } as never) as unknown as { files: Array<{ name: string; content: string }> };
+      const dir = mkdtempSync(join(tmpdir(), 'xbv318c-'));
+      for (const f of r.files) if (!f.name.includes('/')) writeFileSync(join(dir, f.name), f.content);
+      const cs = r.files.filter((f) => f.name.endsWith('.c') && !f.name.includes('/')).map((f) => f.name);
+      for (const cc of ['gcc', 'clang']) expect(() => execFileSync(cc, ['-std=c99', '-Wall', '-Wextra', '-Werror', '-c', '-I.', ...cs], { cwd: dir, stdio: 'pipe' }), cc).not.toThrow();
+    }, 120_000);
+  }
+});
