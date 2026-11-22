@@ -125,7 +125,7 @@ export function limitCIdentifierLength(identifier: string): string {
  */
 export function limitCIdentifiersInSource(source: string): string {
   return source.replace(
-    /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]{63,}/g,
+    /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|(?<![A-Za-z0-9_])(?<!data\.)[A-Za-z_][A-Za-z0-9_]{63,}/g,
     (token) => /^[A-Za-z_]/.test(token) ? limitCIdentifierLength(token) : token,
   );
 }

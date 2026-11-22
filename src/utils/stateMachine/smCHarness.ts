@@ -1,4 +1,4 @@
-import { cStateIndexSymbol, limitCIdentifiersInSource, limitCIdentifierLength } from './smCIdentifierPolicy';
+import { cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
@@ -243,7 +243,16 @@ const xbTraceLayout = (state: SemanticState): XBTraceLayout => {
       );
     }
   }
-  return { signalFields, fixedValidityFields, fixedRealFields, slotFields, errorFields };
+  // The product shortens every member name longer than 63 characters (smCIdentifierPolicy); use the same function.
+  const limited = (map: Map<string, string>): Map<string, string> =>
+    new Map([...map].map(([key, value]) => [key, limitCIdentifierLength(value)]));
+  return {
+    signalFields: limited(signalFields),
+    fixedValidityFields: limited(fixedValidityFields),
+    fixedRealFields: limited(fixedRealFields),
+    slotFields: limited(slotFields),
+    errorFields: limited(errorFields),
+  };
 };
 
 const xbStateMembers = (ir: SemanticModel): Map<string, string> => {
@@ -256,7 +265,7 @@ const xbStateMembers = (ir: SemanticModel): Map<string, string> => {
       let suffix = 2;
       while (names.has(name)) name = `${preferred}_${suffix++}`;
       names.add(name);
-      return [state.id, name];
+      return [state.id, limitCIdentifierLength(name)];
     }));
 };
 
@@ -833,7 +842,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
   ].join('\n');
 };
 
-const renderDifferentialHarnessRaw = (
+export const renderDifferentialHarness = (
   ir: SemanticModel,
   steps: readonly DifferentialScenarioStep[],
 ): string => {
@@ -889,12 +898,6 @@ const renderDifferentialHarnessRaw = (
     '',
   ].join('\n');
 };
-
-/** Same identifier mapping as the generated C (smCIdentifierPolicy), so the harness names match the header. */
-export const renderDifferentialHarness = (
-  ir: SemanticModel,
-  steps: readonly DifferentialScenarioStep[],
-): string => limitCIdentifiersInSource(renderDifferentialHarnessRaw(ir, steps));
 
 const parseMap = (
   encoded: string,
