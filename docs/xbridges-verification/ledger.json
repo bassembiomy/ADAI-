@@ -2559,16 +2559,18 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S3",
    "gate": "V4",
-   "status": "open",
-   "summary": "A Scope with sampleTime 0.1 over [0, 2] logs 20 samples; Simulink logs 21 (both endpoints, t = 2 included). Same on the base. Found by the WP-21 E7 verifier."
+   "status": "closed",
+   "summary": "A Scope with sampleTime 0.1 over [0, 2] logs 20 samples; Simulink logs 21 (both endpoints, t = 2 included). Same on the base. Found by the WP-21 E7 verifier.",
+   "fix": "WP-21 batch E8: batch solvers end with engine.finishAtStopTime (outputs and the discrete update at t_final, as Simulink's last major step), so a Scope with Ts logs both endpoints (21 samples for Ts 0.1 on [0, 2]); no double logging; batch equals live."
   },
   {
    "id": "XBV-315",
    "plan_ref": "4.3 parameters",
    "severity": "S3",
    "gate": "V3",
-   "status": "open",
-   "summary": "The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegative') must reject non-finite values with a PARAMETER_* diagnostic. Found by the WP-21 E7 verifier."
+   "status": "closed",
+   "summary": "The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegative') must reject non-finite values with a PARAMETER_* diagnostic. Found by the WP-21 E7 verifier.",
+   "fix": "WP-21 batch E8: the positive and nonnegative parameter kinds refuse +/-Infinity and NaN at compile (PARAMETER_OUT_OF_RANGE); no factory default is non-finite; parameters that may be inf (stop time, saturation limits) use other kinds."
   },
   {
    "id": "XBV-316",
@@ -2577,6 +2579,14 @@
    "gate": "U16",
    "status": "open",
    "summary": "Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 characters; SM_Data_t variable members whose ids share 63 characters (count / counter); MCAL_CH_<channel> macros. Found by the WP-21 U3 verifier; out of scope of XBV-308 (X-Bridges member names)."
+  },
+  {
+   "id": "XBV-317",
+   "plan_ref": "4.4 worker",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead of 9; DELAY buffer differs). Pre-existing; the app never sends a snapshot back to the worker today, but the protocol supports it. Found by the WP-21 E8 verifier."
   }
  ],
  "blocks": {
