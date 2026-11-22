@@ -2636,24 +2636,27 @@
    "plan_ref": "4.4 worker",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSolver.locateEvent (~216) and StiffSolver (~532) have no cap on events or steps; Simulink stops with an error after the consecutive zero-crossings limit. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSolver.locateEvent (~216) and StiffSolver (~532) have no cap on events or steps; Simulink stops with an error after the consecutive zero-crossings limit. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch S2: Simulink-style consecutive zero-crossing limit (1000 crossings within a tiny window of each other, ZERO_CROSSING_CHATTER error naming the block) in AdaptiveSolver and StiffSolver, live and batch; internal step caps (STIFF_SOLVER_STEP_TOO_SMALL). The sliding mode stops in ~0.2 s; PWM at 20 and 200 kHz is not flagged."
   },
   {
    "id": "XBV-404",
    "plan_ref": "4.4 worker",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch S2: a faulted step commits nothing; live steps and fixed-step batch loops deep-copy block states (cloneState) before the step and restore them on a fault; ode5 / ode23 / ode45 leave the step-start state."
   },
   {
    "id": "XBV-403",
    "plan_ref": "4.4 worker",
    "severity": "S4",
    "gate": "V5",
-   "status": "open",
-   "summary": "A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch S2: under ode2 / ode3 / rk4 a faulted step commits nothing, so state and reported time both stay at the step start."
   },
   {
    "id": "XBV-400",
@@ -2663,6 +2666,46 @@
    "status": "closed",
    "summary": "The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER_LEARNING_MODEL). No product code sends a snapshot to the worker today. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
    "fix": "WP-21 batch W1: the worker snapshot carries the published values of sampled blocks; restoreHeldOutput restores them and the ZOH cache, so a resume between hits publishes the held output; old snapshots fall back; non-sampled blocks are never overwritten."
+  },
+  {
+   "id": "XBV-409",
+   "plan_ref": "4.5 solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base."
+  },
+  {
+   "id": "XBV-410",
+   "plan_ref": "4.5 solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base."
+  },
+  {
+   "id": "XBV-411",
+   "plan_ref": "4.5 solvers",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Variable-step PWM accuracy is wider than XBV-409/410: batch ode45 at 1 kHz with minStep 1e-4 gives x = 1.94 instead of 1.0 for duty 1 s; at 500 Hz 0.054. Same without S2. Found by the WP-21 S2 verifier."
+  },
+  {
+   "id": "XBV-412",
+   "plan_ref": "4.5 solvers",
+   "severity": "S4",
+   "gate": "V5",
+   "status": "open",
+   "summary": "The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window from the event-location tolerance and machine precision only. Found by the WP-21 S2 verifier."
+  },
+  {
+   "id": "XBV-413",
+   "plan_ref": "4.5 solvers",
+   "severity": "S4",
+   "gate": "V4",
+   "status": "open",
+   "summary": "ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier."
   }
  ],
  "blocks": {

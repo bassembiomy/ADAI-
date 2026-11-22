@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 22 done of 29; 2 in progress; 5 to do.
-- Findings: 3 open, 217 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 1 open
-  - S2 (crash, stop, freeze or silent no-op): 0 open
+- Findings: 5 open, 220 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 0 open
+  - S2 (crash, stop, freeze or silent no-op): 2 open
   - S3 (diagnostic, UI or convention deviation): 1 open
-  - S4 (documentation): 1 open
+  - S4 (documentation): 2 open
 - Decisions recorded: 17; open: 0.
 
 ## Work packages
@@ -64,23 +64,25 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (1)
+### S2 - crash, stop, freeze or silent no-op (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-408 | V5 | 4.4 worker | The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSolver.locateEvent (~216) and StiffSolver (~532) have no cap on events or steps; Simulink stops with an error after the consecutive zero-crossings limit. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-409 | V5 | 4.5 solvers | Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base. |
+| XBV-410 | V5 | 4.5 solvers | ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base. |
 
 ### S3 - diagnostic, UI or convention deviation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-404 | V5 | 4.4 worker | A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-411 | V5 | 4.5 solvers | Variable-step PWM accuracy is wider than XBV-409/410: batch ode45 at 1 kHz with minStep 1e-4 gives x = 1.94 instead of 1.0 for duty 1 s; at 500 Hz 0.054. Same without S2. Found by the WP-21 S2 verifier. |
 
-### S4 - documentation (1)
+### S4 - documentation (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-403 | V5 | 4.4 worker | A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-412 | V5 | 4.5 solvers | The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window from the event-location tolerance and machine precision only. Found by the WP-21 S2 verifier. |
+| XBV-413 | V4 | 4.5 solvers | ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -300,6 +302,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-405 (closed): The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOM
 - XBV-406 (closed): The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found
 - XBV-407 (closed): BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so o
+- XBV-408 (closed): The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSol
+- XBV-404 (closed): A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.
+- XBV-403 (closed): A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.
 - XBV-400 (closed): The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, 
 
 ## Decisions
