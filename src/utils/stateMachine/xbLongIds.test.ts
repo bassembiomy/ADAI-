@@ -49,3 +49,43 @@ describe('XBV-308: a long state id', () => {
     expect(() => execFileSync('gcc', ['-std=c99', '-Wall', '-Werror', '-c', '-I', dir, ...cs], { stdio: 'pipe', cwd: dir })).not.toThrow();
   }, 120_000);
 });
+
+// U3 rework 2 (verifier): shortening applies to C identifiers only, never to string literals or comments, so the C trace
+// keeps the model's ids and equals the simulator; models with short ids generate no shortened name in any option set.
+import { asXbOwner, buildSmModel, diffTraces, fixtureOf, runThree, smState, smVar, xbEdge, xbMap, xbNode } from '../../engine/xbridges/testkit';
+import * as fixtures from './smFixtures';
+describe('XBV-308: long ids keep simulator = C traces', () => {
+  for (const [label, G, D, ST] of [
+    ['long block ids', 'g' + 'L'.repeat(80), 'd' + 'Q'.repeat(70) + 'Mixed', 'A'],
+    ['long state id', 'g', 'd', 'Ctrl_' + 'Xy'.repeat(40)],
+  ] as const) {
+    it(`${label}: no difference between the simulator and the compiled C trace`, () => {
+      const a = asXbOwner(smState(ST, { autostart: true }), {
+        nodes: [xbNode(G, 'GAIN', { gain: 2 }, ['u'], ['y']), xbNode(D, 'UNIT_DELAY', { initialCondition: 5 }, ['u'], ['y'])],
+        edges: [xbEdge(`${G}.y`, `${D}.u`)],
+        mappings: [xbMap('u', `${G}.u`, 'in'), xbMap('y', `${D}.y`, 'out')],
+      });
+      const m = buildSmModel({ tickMs: 100, states: [a], variables: [smVar('u'), smVar('y')], layers: [{ id: 'root', parent: null, states: [ST] }] });
+      const t = runThree(fixtureOf(m, [1, 2, 3, 4].map((u) => ({ kind: 'step' as const, inputs: { u } }))));
+      expect(diffTraces(t.sim, t.c)).toEqual([]);
+      expect(diffTraces(t.sim, t.standalone)).toEqual([]);
+    }, 120_000);
+  }
+});
+describe('XBV-308: short ids generate no shortened identifier', () => {
+  it('every smFixtures model under 6 option sets: no <54 chars>_<8 hex> token in any generated file', () => {
+    const bad: string[] = [];
+    for (const [name, f] of Object.entries(fixtures)) {
+      if (typeof f !== 'function') continue;
+      let m: unknown; try { m = (f as () => unknown)(); } catch { continue; }
+      if (!m || !(m as { states?: unknown }).states) continue;
+      const b = buildSemanticModel(m as never); if (!b.ir) continue;
+      for (const opts of [{}, { includeTestShims: true }, { platform: 'autosar' }, { platform: 'autosar', includeTestShims: true }, { includeHostHarness: true, includeVerificationPackage: true }, { platform: 'autosar', includeHostHarness: true, includeVerificationPackage: true }]) {
+        let o: { files: Array<{ name: string; content: string }> };
+        try { o = generateCArtifacts(b.ir, opts as never); } catch { continue; }
+        for (const file of o.files) if (/\b[A-Za-z_][A-Za-z0-9_]{53}_[0-9a-f]{8}\b/.test(file.content)) bad.push(`${name} ${JSON.stringify(opts)} ${file.name}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  }, 240_000);
+});
