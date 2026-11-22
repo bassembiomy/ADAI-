@@ -202,4 +202,22 @@ describe('XBV-318: Generic HIL package compiles with clang -Werror', () => {
     const cs = r.files.filter((f) => f.name.endsWith('.c') && !f.name.includes('/')).map((f) => f.name);
     expect(() => execFileSync('clang', ['-std=c99', '-Wall', '-Werror', '-c', '-I.', ...cs], { cwd: dir, stdio: 'pipe' })).not.toThrow();
   }, 120_000);
+  it('Generic target with only UART and SPI channels: every .c compiles with clang -std=c99 -Wall -Werror', () => {
+    const r = generateMISRACCode({
+      tickMs: 10,
+      states: [{ id: 'idle', name: 'Idle', x: 0, y: 0, width: 100, height: 60, entry: '', during: 'v_tx = v_rx;', exit: '', isActive: false, color: '#000', parentId: null, children: [], priority: 1, isParallel: false, regionId: null, autostart: true }],
+      junctions: [], transitions: [],
+      variables: ['v_rx', 'v_tx'].map((n, i) => ({ id: 'v' + i, name: n, type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true })),
+      layers: [{ id: 'root', name: 'root', parentStateId: null, decomposition: 'OR', stateIds: ['idle'], transitionIds: [], junctionIds: [] }],
+      safetyMode: false,
+      hilConfig: { enabled: true, target: 'Generic', clockSpeed: 1, commPort: '', baudRate: 115200,
+        channels: [{ id: 'rx', name: 'rx', peripheral: 'UART', pin: 'U0', direction: 'In', dataType: 'uint16', rangeMin: 0, rangeMax: 1023, scalingFactor: 1, unit: '' },
+          { id: 'tx', name: 'tx', peripheral: 'SPI', pin: 'S0', direction: 'Out', dataType: 'uint16', rangeMin: 0, rangeMax: 255, scalingFactor: 1, unit: '' }],
+        mappings: [{ id: 'rx_read', adiaVarId: 'v_rx', channelId: 'rx', direction: 'read' }, { id: 'tx_write', adiaVarId: 'v_tx', channelId: 'tx', direction: 'write', safeValue: 0 }] },
+    } as never, { includeTestShims: true } as never) as unknown as { files: Array<{ name: string; content: string }> };
+    const dir = mkdtempSync(join(tmpdir(), 'xbv318b-'));
+    for (const f of r.files) if (!f.name.includes('/')) writeFileSync(join(dir, f.name), f.content);
+    const cs = r.files.filter((f) => f.name.endsWith('.c') && !f.name.includes('/')).map((f) => f.name);
+    expect(() => execFileSync('clang', ['-std=c99', '-Wall', '-Werror', '-c', '-I.', ...cs], { cwd: dir, stdio: 'pipe' })).not.toThrow();
+  }, 120_000);
 });
