@@ -372,7 +372,7 @@ export class StiffSolver {
       c = (temp - t) - y;
       t = temp;
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   // ---------------------------------------------------------------- ode23tb
@@ -627,6 +627,6 @@ export class StiffSolver {
         }
       }
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 }

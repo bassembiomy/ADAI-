@@ -858,6 +858,12 @@ export class XbridgesEngine {
     setZ(z);
   }
 
+  /** Final major step at the stop time (outputs, then the logging/discrete update), as the live path does; no integration. */
+  public finishAtStopTime(stopTime: number) {
+    this.computeOutputs(stopTime);
+    if (!this.fatal) this.updateDiscreteStates(stopTime);
+  }
+
   public computeOutputs(time: number, tempStates?: Map<string, any>) {
     if (!this.compiled) this.compile();
 

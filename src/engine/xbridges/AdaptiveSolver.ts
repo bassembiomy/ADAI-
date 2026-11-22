@@ -339,7 +339,7 @@ export class AdaptiveSolver {
 
     engine.compile(startTime);
     AdaptiveSolver.integrate(engine, tab, startTime, stopTime, { relTol, absTol, hMin, hMax, h0, batch: true, span: stopTime - startTime });
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   static runODE45(engine: XbridgesEngine, options: SolverOptions) {

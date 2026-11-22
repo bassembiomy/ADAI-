@@ -3116,6 +3116,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           shouldSample = false;
         }
 
+        // A sample already logged at this very time (the stop-time sample after a step that landed on it) is not logged twice.
+        if (history.length > 0 && Math.abs(history[history.length - 1].t - time) <= 1e-12 * Math.max(1, Math.abs(time))) {
+          shouldSample = false;
+        }
+
         if (pSampleTime > 0) {
           // Integer-index grid (sample n at the first time >= n*Ts) with an ulp-scaled tolerance.
           const tol = 1e-9 + 64 * Number.EPSILON * Math.abs(time);

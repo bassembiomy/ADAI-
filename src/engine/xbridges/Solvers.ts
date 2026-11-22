@@ -58,7 +58,7 @@ export class Solvers {
       c = (temp - t) - y;
       t = temp;
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   // Discrete (fixed-step, no continuous states): outputs and discrete updates only, no integration.
@@ -78,7 +78,7 @@ export class Solvers {
       const t = startTime + i * dt;
       this.stepDiscrete(engine, t, Math.min(dt, stopTime - t));
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   // ODE2: Heun's Method
@@ -133,7 +133,7 @@ export class Solvers {
       c = (temp - t) - y;
       t = temp;
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   // ODE3: Bogacki-Shampine 3rd Order Fixed-Step
@@ -209,7 +209,7 @@ export class Solvers {
       c = (temp - t) - y;
       t = temp;
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   // ODE4: Runge-Kutta 4th Order
@@ -297,7 +297,7 @@ export class Solvers {
       c = (temp - t) - y;
       t = temp;
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   // ODE5: Dormand-Prince Fixed-Step
@@ -366,7 +366,7 @@ export class Solvers {
       c = (temp - t) - y;
       t = temp;
     }
-    engine.computeOutputs(stopTime);
+    engine.finishAtStopTime(stopTime);
   }
 
   static runFixedStep(engine: XbridgesEngine, options: SolverOptions) {
