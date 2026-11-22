@@ -2,7 +2,7 @@
 // Stiff solvers for X-Bridges: ode14x (fixed-step implicit extrapolation) and ode23tb (variable-step TR-BDF2).
 // The continuous state of every block with evaluateDerivatives is flattened into one Float64Array so that the
 // Jacobian is global (it couples blocks), as in Simulink.
-import { ConsecutiveCrossings, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
+import { ConsecutiveCrossings, crossedOrTouched, scheduledEvent, type ScheduleCache, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -100,7 +100,7 @@ function eventStepLength(
   if (!engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) return null;
   // Own bisection (engine.bracketZeroCrossing compares against the signals left by the previous evaluation, which are the
   // ones of the trial end, not of the base). Much tighter than the step: the mode of a Switch flips at the next major step.
-  const tol = Math.min(zeroTol, 1e-9 * Math.max(1, Math.abs(t)));
+  const tol = Math.min(zeroTol, 1e-11 * Math.max(1, Math.abs(t)));
   let lo = t, hi = t + h;
   for (let iter = 0; iter < 80 && hi - lo > tol; iter++) {
     const mid = (lo + hi) / 2;
@@ -114,28 +114,14 @@ function eventStepLength(
     });
     engine.computeOutputs(mid, sMid);
     const zcMid = engine.getZeroCrossings(mid, sMid);
-    if (engine.hasZeroCrossingSignChange(zcPrev, zcMid)) hi = mid; else lo = mid;
+    if (crossedOrTouched(zcPrev, zcMid)) hi = mid; else lo = mid;
   }
   const hEv = hi - t;
   if (!(hEv > hMin && hEv < h)) return null;
   // The retake ends at the last point before the event (tLow); the bracket [tLow, tHigh] is then crossed in one step that is
   // accepted without the error test (the integrand jumps inside it), as in the explicit solvers.
-  return { tLow: lo - t > hMin ? lo : t, tHigh: hi };
-}
-
-/**
- * Limits a trial step at t to the next turning point of a time-based event source (PWM carrier), so a step holds at most one
- * crossing. Returns the step (landing exactly on the turning point when within hMin of it) or null for a minimum-step
- * violation (a carrier segment shorter than hMin).
- */
-function boundByEvents(engine: XbridgesEngine, t: number, hTry: number, hMin: number, remaining: number): number | null {
-  const hb = engine.maxStepToNextEvent(t);
-  if (hb === null || hb >= remaining) return hTry;
-  if (hb < hMin) {
-    const next = engine.maxStepToNextEvent(t + hb + 0.5 * hMin);
-    if (next !== null && next < hMin) return null;
-  }
-  return hTry >= hb - Math.min(hMin, 0.05 * hb) ? hb : Math.min(hTry, hb);
+  // A zero of the crossing function at hi has not switched the block yet (rising edge of duty > carrier): extend a little beyond it.
+  return { tLow: lo, tHigh: Math.min(hi + 2 * tol, t + h) };
 }
 
 function reportError(engine: XbridgesEngine, code: string, message: string) {
@@ -554,22 +540,30 @@ export class StiffSolver {
     let h = Math.min(hints.h, hMax, dt);
     let tc = t;
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
-    let ev: { tLow: number; tHigh: number } | null = null;
+    let ev: { tLow: number; tHigh: number; scheduled?: boolean } | null = null;
+    const hasSched = engine.hasScheduledEvents();
+    const sched: ScheduleCache = {};
     const crossings = new ConsecutiveCrossings(); // consecutive zero crossings within a tiny time window (XBV-408)
     let passes = 0;
     while (tc < tEnd && !engine.hasFatalError()) {
       if (++passes > MAX_INTERNAL_STEPS_LIVE) { reportStepBudget(engine, MAX_INTERNAL_STEPS_LIVE, tc, 'ode23tb'); return false; }
+      if (ev === null && hasSched) {
+        const se = scheduledEvent(engine, tc, tEnd, hMin, sched);
+        if (se === 'close') { reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb: scheduled events at t=${tc} are spaced closer than the minimum step (${hMin}); the requested accuracy cannot be met.`); return false; }
+        if (se !== null) ev = se;
+      }
       const target = ev === null ? tEnd : (tc < ev.tLow ? ev.tLow : ev.tHigh);
       const sliver = ev !== null && tc >= ev.tLow;
+      if (sliver && ev!.scheduled) {
+        // The bracket of a scheduled event is a few 1e-11 s wide: crossed without integrating; the major step at its end decides the new modes.
+        tc = ev!.tHigh; ev = null;
+        if (tc < tEnd) { engine.computeOutputs(tc); engine.updateDiscreteStates(tc); }
+        continue;
+      }
       const remaining = tc === t && target === tEnd ? dt : target - tc; // the first substep measures the output step itself, not (t + dt) - t
       let hTry = sliver ? remaining : Math.min(h, hMax);
       let reaches = false;
       if (hTry >= remaining - hMin) { hTry = remaining; reaches = true; }
-      if (hasZc && ev === null) {
-        const hb = boundByEvents(engine, tc, hTry, hMin, remaining);
-        if (hb === null) { reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb: events are spaced closer than the minimum step (${hMin}) at t=${tc}; the requested accuracy cannot be met.`); return false; }
-        if (hb < hTry) { hTry = hb; reaches = false; }
-      }
       const statesPrev = hasZc ? snapshotStates(engine) : null;
       const res = StiffSolver.stepODE23TB(engine, tc, hTry, relTol, absTol, false);
       if (res.failed) return false;
@@ -582,7 +576,7 @@ export class StiffSolver {
       if (statesPrev !== null) {
         // A step across a zero crossing (clutch lock, switch, ...) is retaken up to the located event with the error test;
         // the blocks then update their discrete state there (XBV-177).
-        if (res.candidate !== undefined && ev === null) {
+        if (res.candidate !== undefined && (ev === null || ev.scheduled)) {
           const located = eventStepLength(engine, tc, hTry, statesPrev, res.candidate, engine.options?.zeroTol ?? 1e-6, hMin);
           if (located !== null) {
             if (crossings.note(located.tHigh, 1e-9 * Math.max(1, Math.abs(tc)))) { reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, StiffSolver.chatterBlock(engine, tc, hTry, statesPrev, res.candidate), tc, 'ode23tb')); return false; }
@@ -628,23 +622,30 @@ export class StiffSolver {
     const landTol = 1e-12 * Math.max(1, Math.abs(stopTime));
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     const zeroTol = options.zeroTol ?? 1e-6;
-    let ev: { tLow: number; tHigh: number } | null = null;
+    let ev: { tLow: number; tHigh: number; scheduled?: boolean } | null = null;
+    const hasSched = engine.hasScheduledEvents();
+    const sched: ScheduleCache = {};
     const crossings = new ConsecutiveCrossings(); // consecutive zero crossings within a tiny time window (XBV-408)
     let passes = 0;
 
     while (stopTime - t > landTol && !engine.hasFatalError()) {
       if (++passes > MAX_INTERNAL_STEPS_BATCH) { reportStepBudget(engine, MAX_INTERNAL_STEPS_BATCH, t, 'ode23tb'); break; }
+      if (ev === null && hasSched) {
+        const se = scheduledEvent(engine, t, stopTime, hMin, sched);
+        if (se === 'close') { reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb: scheduled events at t=${t} are spaced closer than the minimum step (${hMin}); the requested accuracy cannot be met.`); break; }
+        if (se !== null) ev = se;
+      }
       const target = ev === null ? stopTime : (t < ev.tLow ? ev.tLow : ev.tHigh);
       const sliver = ev !== null && t >= ev.tLow;
+      if (sliver && ev!.scheduled) {
+        // The bracket of a scheduled event is a few 1e-11 s wide: crossed without integrating; the major step at its end decides the new modes.
+        t = ev!.tHigh; ev = null;
+        continue;
+      }
       const remaining = target - t;
       let hTry = sliver ? remaining : Math.min(h, hMax, remaining);
       if (!sliver && remaining - hTry < hMin) hTry = remaining <= hMax ? remaining : remaining / 2;
-      if (hasZc && ev === null) {
-        const hb = boundByEvents(engine, t, hTry, hMin, remaining);
-        if (hb === null) { reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb: events are spaced closer than the minimum step (${hMin}) at t=${t}; the requested accuracy cannot be met.`); break; }
-        hTry = hb;
-      }
-      if (!sliver && hTry < hMin && hTry < remaining && !(hasZc && engine.maxStepToNextEvent(t) !== null)) {
+      if (!sliver && hTry < hMin && hTry < remaining) {
         reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb step size fell below minStep (${hMin}) at t=${t}.`);
         break;
       }
@@ -664,7 +665,7 @@ export class StiffSolver {
           t = ev!.tHigh; ev = null;
           continue;
         }
-        if (res.candidate !== undefined && ev === null) {
+        if (res.candidate !== undefined && (ev === null || ev.scheduled)) {
           const located = eventStepLength(engine, t, hTry, statesPrev, res.candidate, zeroTol, hMin);
           if (located !== null) {
             if (crossings.note(located.tHigh, Math.min(zeroTol, 1e-9 * Math.max(1, Math.abs(t))))) { reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, StiffSolver.chatterBlock(engine, t, hTry, statesPrev, res.candidate), t, 'ode23tb')); break; }

@@ -496,26 +496,46 @@ const pwmEvaluate = (ins: any[], p: any, state: any, time: number, ctx?: BlockEv
   }
   return { duty, carrier, phase };
 };
-/** Distance from `time` to the next turning point of the carrier (the carrier is monotone in between): half a period for the
- *  triangle and square carriers, a quarter for the sine, a full period for the sawtooth carriers. */
-const pwmCarrierSegment = (p: any, time: number): number => {
-  const freq = Number(p.frequency);
-  if (!(Number.isFinite(freq) && freq > 0)) return Number.POSITIVE_INFINITY;
-  const seg = p.carrierType === 'sawtooth' || p.carrierType === 'inv_sawtooth' ? 1 : p.carrierType === 'sine' ? 0.25 : 0.5;
-  const phase = absCarrierPhase(time, freq);
-  const k = Math.floor(phase / seg + 1e-9) + 1;
-  return (k * seg - phase) / freq;
+/** First multiple of `seg` cycles of a carrier of frequency `freq` strictly after `time` (a time just below a multiple counts as before it: the blocks decide on the exact phase). */
+const nextCarrierBreak = (time: number, freq: number, seg: number, offsetCycles = 0): number | undefined => {
+  if (!(Number.isFinite(freq) && freq > 0) || !Number.isFinite(time) || !Number.isFinite(offsetCycles)) return undefined;
+  const k = Math.floor((time * freq + offsetCycles) / seg) + 1;
+  const tn = (k * seg - offsetCycles) / freq;
+  // The cycle count of `time` is still below the multiple (as the blocks compute it) but the division rounds onto `time`: the event is
+  // an ulp ahead, so the solver steps over it (a jump right at the start of a step).
+  return tn > time ? tn : time + 4 * Number.EPSILON * Math.max(Math.abs(time), 1e-300);
 };
+/** Same for the carriers whose phase the blocks take from absCarrierPhase (rounded to 1e-12 cycles: a time that rounds onto the multiple is on it). */
+const nextPhaseBreak = (time: number, freq: number, seg: number): number | undefined => {
+  if (!(Number.isFinite(freq) && freq > 0) || !Number.isFinite(time)) return undefined;
+  const phase = absCarrierPhase(time, freq);
+  const tn = time + ((Math.floor(phase / seg) + 1) * seg - phase) / freq;
+  return tn > time ? tn : time + 4 * Number.EPSILON * Math.max(Math.abs(time), 1e-300);
+};
+/** PWM carrier turning points and jumps: half a period for the triangle and square carriers, a quarter for the sine, a full period for the sawtooth carriers. */
+const pwmCarrierSegmentFraction = (carrierType: unknown): number =>
+  carrierType === 'sawtooth' || carrierType === 'inv_sawtooth' ? 1 : carrierType === 'sine' ? 0.25 : 0.5;
+
 /**
- * Time-based event sources: the longest step from `time` that stays inside one monotone segment of the block's zero-crossing
- * function (null: the block has none). A variable-step solver never steps across such a turning point, so a step holds at
- * most one crossing and no whole PWM pulse is skipped (Simulink limits the step at time-based events). A table keyed by the
- * block type keeps the block object free of a further function member (the worker model strips only the known ones).
+ * Time-scheduled events of a block (contract `XBlock.nextEventTime`): the next time after `t` at which the block's output can
+ * jump or its zero-crossing function changes direction. A variable-step solver lands exactly on it, so no pulse or edge is
+ * skipped and no step holds more than one crossing (Simulink: the solver hits time-based events). The member is attached
+ * non-enumerable: the worker model is a structured clone of the enumerable members, and XbridgesEngine rebuilds it from the
+ * factory like the other function members.
  */
-export const timeEventDistance = (type: string, params: Record<string, any>, time: number): number | null => {
-  if (type === 'PWM_GENERATOR') return pwmCarrierSegment(params, time);
-  if (type === 'THREE_PHASE_PWM') return pwmCarrierSegment({ ...params, carrierType: 'triangle' }, time);
-  return null;
+const NEXT_EVENT_TIME: Record<string, (p: any, state: any, t: number) => number | undefined> = {
+  PWM_GENERATOR: (p, _s, t) => nextPhaseBreak(t, Number(p.frequency), pwmCarrierSegmentFraction(p.carrierType)),
+  THREE_PHASE_PWM: (p, _s, t) => nextPhaseBreak(t, Number(p.frequency), 0.5),
+  SVPWM_GATE_GENERATOR: (p, _s, t) => nextPhaseBreak(t, 1 / Number(p.Ts), 0.5),
+  WaveformGen: (p, _s, t) => {
+    if (p.type !== 'Square') return undefined;
+    const freq = Number(p.freq);
+    const ph = Number(p.phase ?? 0) / (2 * Math.PI);
+    if (!(Number.isFinite(freq) && freq > 0) || !Number.isFinite(ph)) return undefined;
+    // The wave switches where freq * t + phase / (2 pi) is a multiple of 1/2.
+    return nextCarrierBreak(t, freq, 0.5, ph);
+  },
+  Step: (p, _s, t) => { const st = Number(p.stepTime ?? 1); return Number.isFinite(st) && st > t ? st : undefined; },
 };
 /** Three-phase PWM: normalized references and the carrier phase from the committed state (pure). */
 const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number, ctx?: BlockEvalContext): { refs: number[]; phase: number; carrier: number } => {
@@ -12410,6 +12430,17 @@ execute: (ins, p, state) => {
   ...BUS_FACTORIES,
   ...POWERTRAIN_FACTORIES
 };
+
+/** The nextEventTime contract of a block type (undefined: none); the engine restores it on blocks whose model was cloned or spread. */
+export const nextEventTimeOf = (type: string) => Object.prototype.hasOwnProperty.call(NEXT_EVENT_TIME, type) ? NEXT_EVENT_TIME[type] : undefined;
+for (const [type, nextEventTime] of Object.entries(NEXT_EVENT_TIME)) {
+  const build = BLOCK_LIBRARY[type];
+  BLOCK_LIBRARY[type] = (id, params) => {
+    const block = build(id, params);
+    Object.defineProperty(block, 'nextEventTime', { value: nextEventTime, enumerable: false, writable: true, configurable: true });
+    return block;
+  };
+}
 
 /** Trigonometric and hyperbolic blocks are element-wise for vector and matrix inputs (Simulink Trigonometric Function). */
 for (const type of ['SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN', 'ACOT', 'ASEC', 'ACOSEC',

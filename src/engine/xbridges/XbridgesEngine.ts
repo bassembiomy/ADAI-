@@ -1,6 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
 import { XModel, XBlock, ModelDiagnostic, SolverOptions, BlockEvalContext } from './types';
-import { BLOCK_LIBRARY, timeEventDistance, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
+import { BLOCK_LIBRARY, nextEventTimeOf, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
 import { evaluateParameter } from './parameterEvaluation';
@@ -150,6 +150,11 @@ export class XbridgesEngine {
       }
     });
 
+    // The nextEventTime contract is non-enumerable: a model that was cloned, spread or sent to the worker has lost it.
+    this.model.blocks.forEach(b => {
+      const next = nextEventTimeOf(b.type);
+      if (next && typeof b.nextEventTime !== 'function') Object.defineProperty(b, 'nextEventTime', { value: next, enumerable: false, writable: true, configurable: true });
+    });
     this.model.blocks.forEach(b => {
       if (!b.execute) {
         // Exact-case key first (BLOCK_LIBRARY has e.g. 'Integrator' and 'INTEGRATOR'); case-insensitive only without an exact match.
@@ -165,6 +170,9 @@ export class XbridgesEngine {
             if (typeof member === 'function' && typeof (b as any)[key] !== 'function') (b as any)[key] = member;
           }
           b.execute = fresh.execute;
+          if (typeof fresh.nextEventTime === 'function' && typeof b.nextEventTime !== 'function') {
+            Object.defineProperty(b, 'nextEventTime', { value: fresh.nextEventTime, enumerable: false, writable: true, configurable: true });
+          }
           if (!b.inputs || b.inputs.length === 0) b.inputs = fresh.inputs;
           if (!b.outputs || b.outputs.length === 0) b.outputs = fresh.outputs;
           if (b.state === undefined) b.state = fresh.state;
@@ -1027,14 +1035,19 @@ export class XbridgesEngine {
     return zcValues;
   }
 
-  /** Longest step from `time` that stays inside one monotone segment of every time-based event source (null: unbounded). */
-  public maxStepToNextEvent(time: number): number | null {
-    let best: number | null = null;
+  /** True when a block schedules events in time (nextEventTime). */
+  public hasScheduledEvents(): boolean {
+    return this.executionOrder.some(b => typeof b.nextEventTime === 'function');
+  }
+
+  /** The earliest scheduled event of any block after `time` (undefined: none). */
+  public nextScheduledEvent(time: number): number | undefined {
+    let best: number | undefined;
     for (const block of this.executionOrder) {
-      if (!block.ZeroCrossingFn) continue;
+      if (typeof block.nextEventTime !== 'function') continue;
       try {
-        const d = timeEventDistance(block.type, block.params, time);
-        if (d !== null && Number.isFinite(d) && d > 0 && (best === null || d < best)) best = d;
+        const d = block.nextEventTime(block.params, block.state, time);
+        if (d !== undefined && Number.isFinite(d) && d > time && (best === undefined || d < best)) best = d;
       } catch (err) { /* a block with invalid parameters reports its own error when it executes */ }
     }
     return best;

@@ -85,6 +85,11 @@ export interface XBlock {
 
   // Optional: Returns zero-crossing values for discontinuities bracketing
   ZeroCrossingFn?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => number[];
+  /**
+   * Optional (non-enumerable, rebuilt from the factory by the engine): the next time after `time` at which the output of the
+   * block can jump or its zero-crossing function changes direction, or undefined. The variable-step solvers land exactly on it.
+   */
+  nextEventTime?: (params: Record<string, any>, state: any, time: number) => number | undefined;
 }
 
 
