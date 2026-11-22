@@ -2565,6 +2565,14 @@
    "gate": "V3",
    "status": "open",
    "summary": "The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegative') must reject non-finite values with a PARAMETER_* diagnostic. Found by the WP-21 E7 verifier."
+  },
+  {
+   "id": "XBV-316",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S4",
+   "gate": "U16",
+   "status": "open",
+   "summary": "Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 characters; SM_Data_t variable members whose ids share 63 characters (count / counter); MCAL_CH_<channel> macros. Found by the WP-21 U3 verifier; out of scope of XBV-308 (X-Bridges member names)."
   }
  ],
  "blocks": {
