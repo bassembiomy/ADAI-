@@ -1,4 +1,5 @@
 import { computeContentSha256 } from './smVerificationEvidence';
+import { toCIdentifier } from './smExpressions';
 
 export interface ExternalIdentifierInput {
   id: string;
@@ -121,11 +122,12 @@ export function limitCIdentifierLength(identifier: string): string {
 /**
  * Applies limitCIdentifierLength to every identifier token of generated C text longer than 63 characters.
  * Comments, string literals and character constants are copied unchanged, so model ids in trace strings and
- * comments keep their original text.
+ * comments keep their original text. Variable members (`data.<member>`) are already limited by cDataMemberName,
+ * so the mapping leaves them as they are (limiting is idempotent).
  */
 export function limitCIdentifiersInSource(source: string): string {
   return source.replace(
-    /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|(?<![A-Za-z0-9_])(?<!data\.)[A-Za-z_][A-Za-z0-9_]{63,}/g,
+    /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]{63,}/g,
     (token) => /^[A-Za-z_]/.test(token) ? limitCIdentifierLength(token) : token,
   );
 }
@@ -133,4 +135,19 @@ export function limitCIdentifiersInSource(source: string): string {
 /** The one builder of a state index symbol: `<enum>_IDX`, with the enum name and the result both limited to 63 characters. */
 export function cStateIndexSymbol(enumName: string): string {
   return limitCIdentifierLength(`${limitCIdentifierLength(enumName)}_IDX`);
+}
+
+/** The one builder of an SM_Data_t member name (and of `instance->data.<member>`): the C identifier of the variable, limited to 63 characters. */
+export function cDataMemberName(variableName: string): string {
+  return limitCIdentifierLength(toCIdentifier(variableName));
+}
+
+/** The one builder of a state action function name: `<enum>_Entry` / `_Exit` / `_During`, limited as a whole to 63 characters. */
+export function cStateActionSymbol(enumName: string, phase: 'Entry' | 'Exit' | 'During'): string {
+  return limitCIdentifierLength(`${enumName}_${phase}`);
+}
+
+/** The one builder of an MCAL channel macro: `MCAL_CH_<channel>`, limited to 63 characters. */
+export function cMcalChannelMacro(channelId: string): string {
+  return limitCIdentifierLength(`MCAL_CH_${toCIdentifier(channelId).toUpperCase()}`);
 }

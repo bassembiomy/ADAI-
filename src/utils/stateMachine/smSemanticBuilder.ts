@@ -1,4 +1,4 @@
-import { cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
+import { cDataMemberName, cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
 import type { StateData } from '../../types/sm_types';
 import {
   parseActions,
@@ -388,7 +388,7 @@ export const buildSemanticModel = (
   );
   const symbols = new Map<string, { id: string; cName: string }>();
   for (const variable of model.variables) {
-    const cName = toCIdentifier(variable.name);
+    const cName = cDataMemberName(variable.name);
     const symbol = { id: variable.id, cName };
     symbols.set(variable.id, symbol);
     symbols.set(variable.name, symbol);
@@ -677,7 +677,7 @@ export const buildSemanticModel = (
   const variableSymbols = new Map<string, SemanticVariableSymbol>();
   for (const variable of [...model.variables].sort((left, right) =>
     left.id.localeCompare(right.id))) {
-    const cIdentifier = toCIdentifier(variable.name);
+    const cIdentifier = cDataMemberName(variable.name);
     let semanticType: SemanticType = 'float64';
     let cType = 'double';
     switch (variable.type as string) {

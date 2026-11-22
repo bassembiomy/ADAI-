@@ -1,4 +1,5 @@
 import { toCIdentifier } from './smExpressions';
+import { cDataMemberName, cMcalChannelMacro } from './smCIdentifierPolicy';
 import type { SMCStandard } from './smModel';
 import type {
   SemanticIOMapping,
@@ -50,7 +51,7 @@ const renderOperation = (
       return `    (void)SM_Step(&instance, ${delta});\n    (void)SM_Sync_IO(&instance);`;
     }
     case 'set-variable': {
-      const varId = toCIdentifier(op.variableId);
+      const varId = ir.variables[op.variableId]?.cName ?? cDataMemberName(op.variableId);
       const valStr =
         typeof op.value === 'boolean'
           ? op.value ? 'true' : 'false'
@@ -59,7 +60,7 @@ const renderOperation = (
             : String(op.value);
       const mapping = ir.ioMappings.find((m) => m.variableId === op.variableId && m.direction === 'read');
       if (mapping) {
-        const ch = `MCAL_CH_${toCIdentifier(mapping.channelId).toUpperCase()}`;
+        const ch = cMcalChannelMacro(mapping.channelId);
         if (typeof op.value === 'boolean') {
           return `    instance.data.${varId} = ${valStr};\n    MCAL_SetChannelInputBool(${ch}, ${valStr});`;
         }
@@ -69,7 +70,7 @@ const renderOperation = (
     }
     case 'set-input': {
       const mapping = ir.ioMappings.find((m) => m.id === op.mappingId || m.variableId === op.mappingId || m.channelId === op.mappingId);
-      const ch = mapping ? `MCAL_CH_${toCIdentifier(mapping.channelId).toUpperCase()}` : '0U';
+      const ch = mapping ? cMcalChannelMacro(mapping.channelId) : '0U';
       if (typeof op.rawValue === 'boolean') {
         return `    MCAL_SetChannelInputBool(${ch}, ${op.rawValue ? 'true' : 'false'});`;
       }
@@ -118,7 +119,7 @@ const renderExpectation = (
       return `    ADIA_AssertU32((uint32_t)${enumVal}, (uint32_t)instance.active_states[${exp.slot}], "slot ${exp.slot} active state", __FILE__, (unsigned long)__LINE__);`;
     }
     case 'variable': {
-      const varId = toCIdentifier(exp.variableId);
+      const varId = ir.variables[exp.variableId]?.cName ?? cDataMemberName(exp.variableId);
       if (typeof exp.value === 'boolean') {
         return `    ADIA_AssertBool(${exp.value ? 'true' : 'false'}, instance.data.${varId}, "${exp.variableId} value", __FILE__, (unsigned long)__LINE__);`;
       }
