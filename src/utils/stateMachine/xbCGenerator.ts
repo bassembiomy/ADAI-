@@ -1,5 +1,5 @@
 import { toCIdentifier } from './smExpressions';
-import { limitCIdentifiersInSource } from './smCIdentifierPolicy';
+import { cStateIndexSymbol, limitCIdentifiersInSource } from './smCIdentifierPolicy';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import { isContinuousFilter, isContinuousPid, isContinuousStateSpace, xbSumSigns } from './xbCapabilities';
@@ -968,7 +968,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   }
 
   const ownerIndexSymbol = state.xBridges?.ownerState.cIndexSymbol
-    ?? `SM_ST_${toCIdentifier(state.id).toUpperCase()}_IDX`;
+    ?? cStateIndexSymbol(`SM_ST_${toCIdentifier(state.id).toUpperCase()}`);
   const stepTimeSeconds = Number(
     scalarParameter(operation, ['step_time', 'stepTime', 'time'], 0.3),
   );

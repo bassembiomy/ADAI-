@@ -1,3 +1,4 @@
+import { cStateIndexSymbol } from './smCIdentifierPolicy';
 import { resolveXBParameterExpressions } from './xbParameterResolution';
 import { getXBBlockCapability, xbNodeDirectFeedthrough } from './xbCapabilities';
 import { resolveGraphShapes } from './xbShapeResolver';
@@ -1771,7 +1772,7 @@ export const buildXBSemanticModel = (
         const ownerSt = input.ownerState ?? {
           stateId: input.stateId,
           stateName: input.stateId,
-          cIndexSymbol: `SM_ST_${input.stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}_IDX`,
+          cIndexSymbol: cStateIndexSymbol(`SM_ST_${input.stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}`),
           numericIndex: 0,
         };
         operations[node.id] = {
@@ -1857,7 +1858,7 @@ export const buildXBSemanticModel = (
   const ownerState: XBOwnerState = input.ownerState ?? {
     stateId: input.stateId,
     stateName: input.stateId,
-    cIndexSymbol: `SM_ST_${input.stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}_IDX`,
+    cIndexSymbol: cStateIndexSymbol(`SM_ST_${input.stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}`),
     numericIndex: 0,
   };
 

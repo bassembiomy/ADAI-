@@ -1,4 +1,4 @@
-import { limitCIdentifiersInSource, limitCIdentifierLength } from './smCIdentifierPolicy';
+import { cStateIndexSymbol, limitCIdentifiersInSource, limitCIdentifierLength } from './smCIdentifierPolicy';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
@@ -435,7 +435,7 @@ const cString = (value: string): string =>
     .replaceAll('\n', '\\n')}"`;
 
 const stateIndex = (state: SemanticState): string =>
-  limitCIdentifierLength(`${state.enumName}_IDX`);
+  cStateIndexSymbol(state.enumName);
 
 const layerMacro = (layer: SemanticLayer): string =>
   limitCIdentifierLength(`SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`);

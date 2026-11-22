@@ -1,4 +1,4 @@
-import { limitCIdentifierLength } from './smCIdentifierPolicy';
+import { cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -100,7 +100,7 @@ const stateNode = (ir: SemanticModel, stateId: string): string =>
   ir.states[stateId].enumName;
 
 const stateIndex = (ir: SemanticModel, stateId: string): string =>
-  limitCIdentifierLength(`${stateNode(ir, stateId)}_IDX`);
+  cStateIndexSymbol(stateNode(ir, stateId));
 
 const xbStateFunction = (
   state: SemanticState,

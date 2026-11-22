@@ -129,3 +129,8 @@ export function limitCIdentifiersInSource(source: string): string {
     (token) => /^[A-Za-z_]/.test(token) ? limitCIdentifierLength(token) : token,
   );
 }
+
+/** The one builder of a state index symbol: `<enum>_IDX`, with the enum name and the result both limited to 63 characters. */
+export function cStateIndexSymbol(enumName: string): string {
+  return limitCIdentifierLength(`${limitCIdentifierLength(enumName)}_IDX`);
+}
