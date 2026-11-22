@@ -2595,8 +2595,9 @@
    "plan_ref": "HIL",
    "severity": "S4",
    "gate": "V7",
-   "status": "open",
-   "summary": "Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier."
+   "status": "closed",
+   "summary": "Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier.",
+   "fix": "WP-21: the Generic HIL package emits its UART/SPI channel helpers, input / output simulation arrays and pin helper only when a channel uses them; 14 channel configurations compile and link with gcc and clang -std=c99 -Wall -Wextra -Werror; all other targets byte-identical."
   }
  ],
  "blocks": {

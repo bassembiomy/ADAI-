@@ -1,12 +1,35 @@
 import { HILConfig } from './hilTypes';
 import { cDataMemberName } from '../../utils/stateMachine/smCIdentifierPolicy';
-import { hilDriverTemplates } from './hilDriverTemplates';
+import { hilDriverTemplates, GENERIC_SIM_HEADER, GENERIC_SIM_INPUTS, GENERIC_SIM_OUTPUTS, GENERIC_PIN_INDEX_HELPER } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
 import { validatePinAssignments } from './pinValidator';
 import { defaultTargetPackFor } from '../targetPacks/defaultTargetPacks';
 
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
+
+/*
+ * The Generic template defines static inline channel helpers (HAL_UART_ReadChannel, ...) and
+ * simulation storage. Keep only what a configured channel references, so that clang -Wall -Werror
+ * does not report unused static objects or functions. Other targets are not passed through here.
+ */
+function pruneGenericGlobals(
+  globals: string,
+  usedHelpers: Record<string, boolean>,
+  inputsUsed: boolean,
+  outputsUsed: boolean
+): string {
+  let out = globals.replace(
+    /static inline [^\n]*?\b(HAL_(?:UART|SPI)_(?:Read|Write)Channel)\([^)]*\) \{\n[\s\S]*?\n\}\n?/g,
+    (block: string, name: string) => (usedHelpers[name] ? block : '')
+  );
+  if (!inputsUsed) out = out.replace(GENERIC_SIM_INPUTS, '');
+  if (!outputsUsed) out = out.replace(GENERIC_SIM_OUTPUTS, '');
+  if (!inputsUsed && !outputsUsed) {
+    out = out.replace(GENERIC_SIM_HEADER, '').replace(GENERIC_PIN_INDEX_HELPER, '');
+  }
+  return out;
+}
 
 export function generateHALCode(
   config: HILConfig,
@@ -145,7 +168,12 @@ void HIL_Receive_Poll(void);
 #include <string.h>
 ${mcu.systemIncludes}
 
-${mcu.globals}
+${target === 'Generic' ? pruneGenericGlobals(mcu.globals, {
+  HAL_UART_ReadChannel: uartReadChannels.length > 0,
+  HAL_UART_WriteChannel: uartWriteChannels.length > 0,
+  HAL_SPI_ReadChannel: spiReadChannels.length > 0,
+  HAL_SPI_WriteChannel: spiWriteChannels.length > 0,
+}, gpioReadChannels.length > 0 || adcChannels.length > 0, gpioWriteChannels.length > 0 || dacChannels.length > 0 || pwmChannels.length > 0) : mcu.globals}
 
 void HAL_Drivers_Init(void) {
     ${mcu.systemInit.trim()}

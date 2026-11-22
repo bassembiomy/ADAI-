@@ -125,6 +125,41 @@ function getSTM32F1UARTConfig(pin: string) {
   };
 }
 
+/*
+ * Generic simulation storage and pin index helper. Only the GPIO, ADC, DAC and PWM
+ * snippets reference them, so the HIL generator emits them only when such a channel exists.
+ */
+export const GENERIC_SIM_HEADER = `/* Generic software simulations */
+`;
+// simulated_inputs is read by GPIO In and ADC channels only.
+export const GENERIC_SIM_INPUTS = `static int simulated_inputs[100] = {0};
+`;
+// simulated_outputs is written by GPIO Out, DAC and PWM channels only.
+export const GENERIC_SIM_OUTPUTS = `static int simulated_outputs[100] = {0};
+`;
+export const GENERIC_SIMULATION_ARRAYS = GENERIC_SIM_HEADER + GENERIC_SIM_INPUTS + GENERIC_SIM_OUTPUTS;
+
+// Always emitted for the Generic target: serialReceive uses rx_buffer.
+export const GENERIC_RX_STATE = `char rx_buffer[256];
+int rx_index = 0;
+`;
+
+export const GENERIC_PIN_INDEX_HELPER = `static inline int HIL_GetPinIndex(const char* pin) {
+    if (pin == NULL || pin[0] == '\\0') return 0;
+    char* endptr;
+    long val = strtol(pin, &endptr, 10);
+    if (*endptr == '\\0') {
+        return (int)(val % 100);
+    }
+    int hash = 0;
+    for (int i = 0; pin[i] != '\\0'; i++) {
+        hash = (hash * 31) + pin[i];
+    }
+    if (hash < 0) hash = -hash;
+    return hash % 100;
+}
+`;
+
 export const hilDriverTemplates: Record<TargetMCU, MCUTemplate> = {
   STM32F4: {
     name: 'STM32F4xx HAL',
@@ -1215,27 +1250,8 @@ void HIL_SendString(const char* str) {
     name: 'Generic C / Linux Platform',
     systemIncludes: `#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>`,
     globals: `
-/* Generic software simulations */
-static int simulated_inputs[100] = {0};
-static int simulated_outputs[100] = {0};
-char rx_buffer[256];
-int rx_index = 0;
-
-static inline int HIL_GetPinIndex(const char* pin) {
-    if (pin == NULL || pin[0] == '\\0') return 0;
-    char* endptr;
-    long val = strtol(pin, &endptr, 10);
-    if (*endptr == '\\0') {
-        return (int)(val % 100);
-    }
-    int hash = 0;
-    for (int i = 0; pin[i] != '\\0'; i++) {
-        hash = (hash * 31) + pin[i];
-    }
-    if (hash < 0) hash = -hash;
-    return hash % 100;
-}
-
+${GENERIC_SIMULATION_ARRAYS}${GENERIC_RX_STATE}
+${GENERIC_PIN_INDEX_HELPER}
 static inline uint32_t HAL_UART_ReadChannel(void) {
     return 0U;
 }
