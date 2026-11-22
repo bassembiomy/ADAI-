@@ -108,3 +108,41 @@ describe('XBV-308: long variable ids keep simulator = C traces', () => {
     expect(diffTraces(t.sim, t.c)).toEqual([]);
   }, 120_000);
 });
+
+// XBV-316: no two distinct identifiers in the generated C are equal in their first 63 characters (C99 5.2.4.1), also for
+// the state-machine names that are not X-Bridges members: SM_ST_<enum>_Entry / _Exit / _During of a long state id and
+// SM_Data_t members of long variable ids that differ only after character 63.
+describe('XBV-316: state-machine C names unique within 63 characters', () => {
+  const collisions = (files: Array<{ name: string; content: string }>) => {
+    const byPrefix = new Map<string, Set<string>>();
+    for (const f of files) {
+      if (!/\.(c|h)$/.test(f.name)) continue;
+      const code = f.content.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ').replace(/"(?:\\.|[^"\\])*"/g, '""');
+      for (const id of code.match(/\b[A-Za-z_][A-Za-z0-9_]{63,}\b/g) ?? []) {
+        const k = id.slice(0, 63);
+        if (!byPrefix.has(k)) byPrefix.set(k, new Set());
+        byPrefix.get(k)!.add(id);
+      }
+    }
+    return [...byPrefix.values()].filter((s) => s.size > 1).map((s) => [...s].join(' / '));
+  };
+  it('a 90-character state id with entry / exit / during actions and two 70-character variables differing at the end: no collision, and it compiles', () => {
+    const ST = 'Ctrl_' + 'Xy'.repeat(42);
+    const V1 = 'v'.repeat(62) + '_count', V2 = 'v'.repeat(62) + '_counter';
+    const m = buildSmModel({
+      tickMs: 100,
+      states: [smState(ST, { autostart: true, entry: `${V1} = 1;`, exit: `${V2} = 2;`, during: `${V1} = ${V1} + 1;` } as never), smState('B', { priority: 2 })],
+      transitions: [],
+      variables: [smVar(V1), smVar(V2)],
+      layers: [{ id: 'root', parent: null, states: [ST, 'B'] }],
+    });
+    const b = buildSemanticModel(m as never);
+    expect(b.ir).toBeDefined();
+    const out = generateCArtifacts(b.ir as never, { includeTestShims: true });
+    expect(collisions(out.files)).toEqual([]);
+    const dir = mkdtempSync(join(tmpdir(), 'xbv316-'));
+    for (const f of out.files) writeFileSync(join(dir, f.name), f.content);
+    const cs = out.files.filter((f: { name: string }) => f.name.endsWith('.c')).map((f: { name: string }) => join(dir, f.name));
+    expect(() => execFileSync('gcc', ['-std=c99', '-Wall', '-Werror', '-c', '-I', dir, ...cs], { stdio: 'pipe', cwd: dir })).not.toThrow();
+  }, 120_000);
+});

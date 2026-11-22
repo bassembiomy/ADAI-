@@ -275,3 +275,23 @@ describe('the real worker client and a structured-clone boundary (as in the brow
 
 });
 
+
+// XBV-317: the engine snapshot carries the discrete hit indices, so a run resumed from a snapshot taken at a sample hit
+// continues on the same grid as an uninterrupted run (no repeated hit). Discrete integrator Ts 0.1 and a DELAY of 2 samples,
+// solver step 0.05, snapshot after 10 steps (t = 0.5, a hit).
+describe('XBV-317: snapshot resume keeps the discrete hit grid', () => {
+  it('worker run 0..2 s with final outputs, resumed 2..4 s from its snapshot, equals one run 0..4 s (discrete integrator, DELAY)', () => {
+    const spec = {
+      blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 'i', type: 'INTEGRATOR_DISCRETE', params: { sample_time: 0.5 } },
+        { id: 'd', type: 'DELAY', params: { delay_length: 2, sampleTime: 0.5 } }],
+      wires: ['c.out -> i.u', 'i.y -> d.u'],
+    };
+    const opts = (stop: number) => ({ solver: 'rk4', startTime: 0, stopTime: stop, fixedStep: 0.1 });
+    const run = (req: Record<string, unknown>) => send({ type: 'step', model: buildModel(spec), solverType: 'rk4', dt: 0.1, finalOutputs: true, ...req } as never);
+    const first = run({ solverOptions: opts(2), time: 0, batchSize: 20 });
+    const resumed = run({ solverOptions: opts(4), engineSnapshot: JSON.parse(JSON.stringify(first.engineSnapshot)), time: 2, batchSize: 20 });
+    const whole = run({ solverOptions: opts(4), time: 0, batchSize: 40 });
+    expect(resumed.engineSnapshot?.blockStates.i).toEqual(whole.engineSnapshot?.blockStates.i);
+    expect(resumed.engineSnapshot?.blockStates.d).toEqual(whole.engineSnapshot?.blockStates.d);
+  });
+});
