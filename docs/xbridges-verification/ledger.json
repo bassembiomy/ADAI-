@@ -100,6 +100,12 @@
    "date": "2026-11-16",
    "topic": "XBV-106 vector/matrix state-machine variables",
    "decision": "Recorded as a product limitation, not fixed in WP-21: state-machine variables stay scalar; vector/matrix signals work inside an X-Bridges model and cross the state-machine boundary element by element (one scalar variable per element). Building vector/matrix variables is a feature (model, interpreter, C generator, validator, UI) estimated at 1-2 days; reversible on request."
+  },
+  {
+   "id": "D17",
+   "date": "2026-11-22",
+   "topic": "XBV-306 diagonal blocks",
+   "decision": "MatrixDiag, Diag, DiagExtract and ExtractDiag follow MATLAB diag: the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal), as the embedded interpreter and generated C already did. The create/extract diagMode option is removed instead of enforced, so existing models and parity are unchanged. Reversible on request."
   }
  ],
  "wps": [
@@ -2461,24 +2467,27 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S4",
    "gate": "U8",
-   "status": "open",
-   "summary": "parameterSchema lists representation continuous|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION; the factories fix the domain (as Simulink's separate blocks do) and the panel hides the parameter, so the schema option list is wrong. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "parameterSchema lists representation continuous|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION; the factories fix the domain (as Simulink's separate blocks do) and the panel hides the parameter, so the schema option list is wrong. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U1: parameterSchema lists one representation per transfer-function block (continuous for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM; discrete for DISCRETE_TRANSFER_FUNCTION), matching the factories; STATE_SPACE keeps both."
   },
   {
    "id": "XBV-305",
    "plan_ref": "4.1 universal battery",
    "severity": "S2",
    "gate": "U8",
-   "status": "open",
-   "summary": "FLUX_REFERENCE mode field_weakening gives the same output as constant (silent no-op; the code comment says not implemented, BlockDefinitions.ts ~3883). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "FLUX_REFERENCE mode field_weakening gives the same output as constant (silent no-op; the code comment says not implemented, BlockDefinitions.ts ~3883). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U1: FLUX_REFERENCE has a speed input and base_speed; field_weakening gives value for |w| <= base_speed and value*base_speed/|w| above it; default value stays 0."
   },
   {
    "id": "XBV-306",
    "plan_ref": "4.1 universal battery",
    "severity": "S2",
    "gate": "U8",
-   "status": "open",
-   "summary": "MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U1, decision D17: MatrixDiag / Diag / DiagExtract / ExtractDiag follow MATLAB diag (vector -> diagonal matrix, matrix -> diagonal); the misleading diagMode option is removed from factory, schema, panel, node badge and help; saved models with a stray diagMode still load and run."
   },
   {
    "id": "XBV-307",
@@ -2502,16 +2511,18 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S2",
    "gate": "U8",
-   "status": "open",
-   "summary": "FUZZY_INFERENCE_SYSTEM.orMethod (max|probor) is stored but never read: both give 0.083979 while andMethod changes the output (BlockDefinitions.ts ~10551). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "FUZZY_INFERENCE_SYSTEM.orMethod (max|probor) is stored but never read: both give 0.083979 while andMethod changes the output (BlockDefinitions.ts ~10551). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U1: FUZZY_INFERENCE_SYSTEM.orMethod (max | probor) combines the antecedents of OR rules; rule aggregation stays max (MATLAB AggregationMethod)."
   },
   {
    "id": "XBV-310",
    "plan_ref": "4.1 universal battery",
    "severity": "S3",
    "gate": "U8",
-   "status": "open",
-   "summary": "16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U1: 16 panel option parameters (CLARKE mode, PWM carrierType, THREE_PHASE_PWM method, CFD_DEM mode, FIS type/and/or/defuzz, FUZZY_RULE operator/implication, FUZZY_AND/OR/DEFUZZIFY method) are in parameterSchema with the panel's values; unknown and wrong-case values are refused at compile. No lab uses a value outside the lists."
   },
   {
    "id": "XBV-311",

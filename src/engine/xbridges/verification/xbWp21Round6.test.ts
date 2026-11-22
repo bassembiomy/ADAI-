@@ -135,3 +135,58 @@ describe('XBV-313: PWM gate pattern does not depend on an integer-period start t
     });
   }
 });
+
+// XBV-305 (U1): FLUX_REFERENCE field weakening, standard constant-power region: Id* = value for |w| <= base_speed and
+// value * base_speed / |w| above it; constant mode always outputs value. The factory default value stays 0 (PMSM Id* = 0).
+describe('XBV-305: FLUX_REFERENCE field weakening', () => {
+  const run = (mode: string, w: number, params: Record<string, unknown> = { value: 2, base_speed: 100 }) => Number(runModel(buildModel({
+    blocks: [{ id: 'w', type: 'Constant', params: { value: w } }, { id: 'f', type: 'FLUX_REFERENCE', params: { mode, ...params } }],
+    wires: ['w.out -> f.speed'],
+  }), { solver: 'discrete', dt: 0.01, stopTime: 0.01, probes: ['f.id_ref'] }).signals['f.id_ref'].at(-1));
+  it('field_weakening: 2 at 50 and 100 rad/s, 2*100/250 = 0.8 at 250 rad/s and at -250 rad/s', () => {
+    expect(run('field_weakening', 50)).toBeCloseTo(2, 12);
+    expect(run('field_weakening', 100)).toBeCloseTo(2, 12);
+    expect(run('field_weakening', 250)).toBeCloseTo(0.8, 12);
+    expect(run('field_weakening', -250)).toBeCloseTo(0.8, 12);
+  });
+  it('constant: 2 at every speed', () => {
+    for (const w of [0, 250, -250]) expect(run('constant', w)).toBeCloseTo(2, 12);
+  });
+  it('the factory default value is 0, as before (no behaviour change for existing models)', () => {
+    expect(BLOCK_LIBRARY_ROUND6['FLUX_REFERENCE']('f', {}).params.value).toBe(0);
+  });
+});
+
+// XBV-309 (U1): FUZZY_INFERENCE_SYSTEM.orMethod applies to OR rules only (MATLAB fis.OrMethod); rule aggregation stays max
+// (MATLAB AggregationMethod default), so a rule base without OR rules gives the same output for max and probor.
+import { BLOCK_LIBRARY as BLOCK_LIBRARY_ROUND6 } from '../BlockDefinitions';
+describe('XBV-309: FUZZY_INFERENCE_SYSTEM orMethod', () => {
+  const fis = (orMethod: string, rules?: unknown[]) => Number(runModel(buildModel({
+    blocks: [{ id: 'a', type: 'Constant', params: { value: 0.75 } }, { id: 'b', type: 'Constant', params: { value: 0.2 } }, { id: 'f', type: 'FUZZY_INFERENCE_SYSTEM', params: { orMethod, ...(rules ? { rules } : {}) } }],
+    wires: ['a.out -> f.x1', 'b.out -> f.x2'],
+  }), { solver: 'discrete', dt: 0.01, stopTime: 0.01, probes: ['f.y'] }).signals['f.y'].at(-1));
+  it('default rule base (AND rules only): max and probor give the same output (aggregation is not orMethod)', () => {
+    expect(fis('probor')).toBe(fis('max'));
+  });
+  it('an OR rule: max and probor give different outputs', () => {
+    const rules = [{ antecedents: [2, 1], consequent: 3, weight: 1, operator: 'OR' }, { antecedents: [3, 1], consequent: 1, weight: 1 }];
+    expect(fis('probor', rules)).not.toBeCloseTo(fis('max', rules), 6);
+  });
+});
+
+// D17 (U1, XBV-306): MatrixDiag / Diag / DiagExtract / ExtractDiag follow MATLAB diag: a vector input builds a diagonal
+// matrix, a matrix input extracts its diagonal. There is no create / extract option (removed from the schema and panel).
+import { parameterKind } from '../parameterSchema';
+describe('D17: diagonal blocks follow MATLAB diag, no diagMode option', () => {
+  for (const type of ['MatrixDiag', 'Diag', 'DiagExtract', 'ExtractDiag']) {
+    it(`${type}: no diagMode in the parameter schema or factory params`, () => {
+      expect(parameterKind(type, 'diagMode')).toBeUndefined();
+      expect(BLOCK_LIBRARY_ROUND6[type]?.('d', {})?.params?.diagMode).toBeUndefined();
+    });
+  }
+  it('MatrixDiag: [1 2] -> [[1 0], [0 2]] and [[1 0], [0 2]] -> [1 2]', () => {
+    const b = BLOCK_LIBRARY_ROUND6['MatrixDiag']('d', {});
+    expect(b.execute([[1, 2]] as never, b.params, b.state, 0).outputs[0]).toEqual([[1, 0], [0, 2]]);
+    expect(b.execute([[[1, 0], [0, 2]]] as never, b.params, b.state, 0).outputs[0]).toEqual([1, 2]);
+  });
+});

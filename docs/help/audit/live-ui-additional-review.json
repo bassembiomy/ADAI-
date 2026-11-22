@@ -3054,5 +3054,25 @@
     "status": "excluded",
     "reason": "XbridgesPropertiesPanel callback wiring delegates events into the rendered child component. Its rendered controls are audited separately; this call site is not another standalone UI action.",
     "featureIds": []
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "input|onChange:{e=>setSolverOptionText('maxStep',e.target.value)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b"
+    ]
+  },
+  {
+    "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "signature": "input|onChange:{e=>setSolverOptionText('minStep',e.target.value)}",
+    "id": "live:components/xbridges/XbridgesWorkspace:c148cf0affa4",
+    "status": "documented",
+    "reason": "Additional source handler reviewed against its component implementation.",
+    "featureIds": [
+      "live:components/xbridges/XbridgesWorkspace:c148cf0affa4"
+    ]
   }
 ]

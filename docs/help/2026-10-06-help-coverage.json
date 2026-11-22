@@ -1,7 +1,7 @@
 {
   "scope": "Registered semantic features; UI source candidates reported separately.",
-  "total": 2207,
-  "documented": 2207,
+  "total": 2209,
+  "documented": 2209,
   "missing": 0,
   "coverage": 100,
   "duplicateFeatureIds": [],
@@ -14545,6 +14545,24 @@
       "id": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
       "label": "Newton Iter. (ode14x)",
       "topicId": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
+      "label": "Max Step (maximum step size)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:c148cf0affa4",
+      "label": "Min Step (minimum step size)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:c148cf0affa4",
       "sectionId": "use",
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
       "kind": "action",

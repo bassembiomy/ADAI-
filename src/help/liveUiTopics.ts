@@ -1620,6 +1620,24 @@ export const LIVE_UI_FEATURES: HelpFeature[] = [
     "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
     "kind": "action",
     "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
+    "label": "Max Step (maximum step size)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:c148cf0affa4",
+    "label": "Min Step (minimum step size)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:c148cf0affa4",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
   }
 ];
 export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
@@ -5034,6 +5052,44 @@ export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
         "id": "use",
         "title": "Newton Iter. (ode14x)",
         "body": "Number of Newton iterations of each implicit solve of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 1. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b": {
+    "title": "Max Step (maximum step size)",
+    "category": "Workspace Controls",
+    "description": "Largest internal step of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), as Max step size in the Simulink Solver pane; the field is shown only for these solvers. Leave it empty for auto (the engine default). The value must be a number greater than 0 and not smaller than Min Step: an invalid value is marked in the field and is not stored.",
+    "content": "Largest internal step of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), as Max step size in the Simulink Solver pane; the field is shown only for these solvers. Leave it empty for auto (the engine default). The value must be a number greater than 0 and not smaller than Min Step: an invalid value is marked in the field and is not stored.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Max Step (maximum step size)",
+        "body": "Largest internal step of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), as Max step size in the Simulink Solver pane; the field is shown only for these solvers. Leave it empty for auto (the engine default). The value must be a number greater than 0 and not smaller than Min Step: an invalid value is marked in the field and is not stored.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:c148cf0affa4": {
+    "title": "Min Step (minimum step size)",
+    "category": "Workspace Controls",
+    "description": "Smallest internal step of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), as Min step size in the Simulink Solver pane; when error control would need a smaller step the run stops with a step-too-small diagnostic. Leave it empty for auto. The value must be a number greater than 0 and not greater than Max Step: an invalid value is marked in the field and is not stored.",
+    "content": "Smallest internal step of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), as Min step size in the Simulink Solver pane; when error control would need a smaller step the run stops with a step-too-small diagnostic. Leave it empty for auto. The value must be a number greater than 0 and not greater than Max Step: an invalid value is marked in the field and is not stored.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Min Step (minimum step size)",
+        "body": "Smallest internal step of the variable-step solvers Adaptive ODE23, Adaptive ODE45 and Adaptive TR-BDF2 (ode23tb), as Min step size in the Simulink Solver pane; when error control would need a smaller step the run stops with a step-too-small diagnostic. Leave it empty for auto. The value must be a number greater than 0 and not greater than Max Step: an invalid value is marked in the field and is not stored.",
         "sources": [
           "src/components/xbridges/XbridgesWorkspace.tsx"
         ]

@@ -26,6 +26,7 @@ const OUTPUT_TYPE_ALL = option(
   'fixed_point', 'float16', 'float32', 'float64', 'boolean', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32',
 );
 const ROUNDING = option('floor', 'ceil', 'ceiling', 'zero', 'nearest', 'round', 'convergent', 'simplest');
+const FUZZY_DEFUZZ = option('centroid', 'bisector', 'mom', 'som', 'lom');
 const OVERFLOW = option('saturate', 'wrap', 'error');
 
 const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
@@ -44,7 +45,6 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
 
   // Linear algebra
   MatrixConcat: { axis: { kind: 'integer', min: 0, max: 1 }, mode: option('vector', 'multidimensional'), numInputs: int1 },
-  MatrixDiag: { diagMode: option('create', 'extract') },
   IdentityMatrix: { dim: int1 },
   SubMatrix: { rowStart: int1, rowEnd: int1, colStart: int1, colEnd: int1 },
 
@@ -55,15 +55,15 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
     A: matrix, B: matrix, C: matrix, D: matrix, x0: vector,
     representation: CONTINUOUS_DISCRETE, sampleTime,
   },
-  TRANSFER_FUNCTION: { numerator: vector, denominator: vector, representation: CONTINUOUS_DISCRETE, sampleTime },
-  ZERO_POLE_GAIN: { numerator: vector, denominator: vector, representation: CONTINUOUS_DISCRETE, sampleTime },
+  TRANSFER_FUNCTION: { numerator: vector, denominator: vector, representation: option('continuous'), sampleTime },
+  ZERO_POLE_GAIN: { numerator: vector, denominator: vector, representation: option('continuous'), sampleTime },
   ROOT_LOCUS: {
     numerator: vector, denominator: vector, gain: number, maxGain: number,
     simulationType: option('open_loop', 'closed_loop'), sampleTime,
   },
   LAPLACE_TRANSFORM: {
     numerator: vector, denominator: vector, mappingType: option('denominator', 'numerator'), maxDegree: int1,
-    defaultDenominator: vector, representation: CONTINUOUS_DISCRETE, sampleTime,
+    defaultDenominator: vector, representation: option('continuous'), sampleTime,
   },
 
   // Discontinuities
@@ -75,7 +75,7 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
   // Discrete and delay
   DELAY: { delay_length: int0, initial_condition: numeric, sampleTime },
   INTEGRATOR_DISCRETE: { initial_condition: numeric, sample_time: sampleTime, method: option('forward_euler', 'backward_euler', 'tustin') },
-  DISCRETE_TRANSFER_FUNCTION: { numerator: vector, denominator: vector, representation: CONTINUOUS_DISCRETE, sampleTime },
+  DISCRETE_TRANSFER_FUNCTION: { numerator: vector, denominator: vector, representation: option('discrete'), sampleTime },
   Counter: { maxValue: int1 },
   DISCRETE_IMPULSE: { amplitude: number, delay: int0, sampleTime },
   UNIT_DELAY: { initialCondition: numeric, sampleTime },
@@ -107,7 +107,11 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
   SPEED_CONTROLLER: { Kp: number, Ki: number, maxIq: number },
   CURRENT_CONTROLLER_DQ: { Kp_d: number, Ki_d: number, Kp_q: number, Ki_q: number, iMax: number },
   VOLTAGE_REFERENCE_GENERATOR: { frequency: number, amplitude: number },
-  FLUX_REFERENCE: { mode: option('constant', 'field_weakening'), value: number },
+  CLARKE_TRANSFORM: { mode: option('amplitude_invariant', 'power_invariant') },
+  PWM_GENERATOR: { carrierType: option('triangle', 'sawtooth', 'inv_sawtooth', 'sine', 'square') },
+  THREE_PHASE_PWM: { method: option('SPWM', 'Saddle', 'SVPWM') },
+  CFD_DEM_SURROGATE_LEARNER: { mode: option('training', 'inference') },
+  FLUX_REFERENCE: { mode: option('constant', 'field_weakening'), value: number, base_speed: positive },
   FIELD_ORIENTED_CONTROL: { Kp: number, Ki: number },
   ROTOR_POSITION_ESTIMATOR: {
     method: option('Sensorless_SMO', 'Hall_sensor'), Rs: number, Ls: number, psi_m: number, P: positive,
@@ -174,12 +178,15 @@ const BASE_SCHEMA: Record<string, Record<string, ParameterKind>> = {
   SVPWM_MODULATOR: { Vdc: positive },
   SWITCHING_TIME_CALCULATOR: { Vdc: positive },
   MPC_CONTROLLER: { Np: int1, Nc: int1 },
-  FUZZY_RULE: { numAntecedents: int1 },
-  FUZZY_AND: { numInputs: int1 },
-  FUZZY_OR: { numInputs: int1 },
-  FUZZY_INFERENCE_SYSTEM: { numInputs: int1, defuzzResolution: { kind: 'integer', min: 2 } },
+  FUZZY_RULE: { numAntecedents: int1, operator: option('AND', 'OR'), implication: option('min', 'prod') },
+  FUZZY_AND: { numInputs: int1, method: option('min', 'product') },
+  FUZZY_OR: { numInputs: int1, method: option('max', 'probor') },
+  FUZZY_INFERENCE_SYSTEM: {
+    numInputs: int1, defuzzResolution: { kind: 'integer', min: 2 }, type: option('Mamdani', 'Sugeno'),
+    andMethod: option('min', 'product'), orMethod: option('max', 'probor'), defuzzMethod: FUZZY_DEFUZZ,
+  },
   FUZZY_PID_CONTROLLER: { numMFs: int1 },
-  FUZZY_DEFUZZIFY: { resolution: { kind: 'integer', min: 2 } },
+  FUZZY_DEFUZZIFY: { resolution: { kind: 'integer', min: 2 }, method: FUZZY_DEFUZZ },
   FUZZY_SURFACE_VIEWER: { resolution: { kind: 'integer', min: 2 } },
   RL_Q_LEARNING_CONTROLLER: { numStates: int1, numActions: int1, seed: int0 },
   ROBOT_VACUUM_BATTERY: { capacity_Ah: positive },

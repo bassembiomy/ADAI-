@@ -2394,11 +2394,6 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
                     Axis: {data.params?.axis === 1 ? 'Horizontal' : 'Vertical'}
                   </div>
                 )}
-                {data.type === 'MatrixDiag' && (
-                  <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[9px] font-mono font-bold text-slate-300 capitalize">
-                    Mode: {data.params?.diagMode || 'create'}
-                  </div>
-                )}
                 {data.type === 'IdentityMatrix' && (
                   <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[9px] font-mono font-bold text-slate-300">
                     {data.params?.dim ?? 3} x {data.params?.dim ?? 3}

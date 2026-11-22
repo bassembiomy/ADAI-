@@ -841,7 +841,7 @@ export function UseCaseWorkspace({
               )}
               {selectedUseCase && (
                 <label>Description{' '}
-                  <textarea aria-label="Use case description" rows={2}
+                  <textarea data-help-feature="sysml:element:UseCase" aria-label="Use case description" rows={2}
                     value={descriptionDraft?.id === selectedUseCase.id ? descriptionDraft.value : (selectedUseCase.description ?? '')}
                     onChange={event => setDescriptionDraft({ id: selectedUseCase.id, value: event.target.value })}
                     onBlur={commitDescription}
@@ -851,7 +851,7 @@ export function UseCaseWorkspace({
               )}
               {selectedSubject && (
                 <label>Subject (Block){' '}
-                  <select aria-label="Subject (Block)" value={selectedSubject.realizedByBlockId ?? ''}
+                  <select data-help-feature="behavior:element:usecase:subject" aria-label="Subject (Block)" value={selectedSubject.realizedByBlockId ?? ''}
                     onChange={event => execute({ type: 'updateElement', elementId: selectedSubject.id, patch: { realizedByBlockId: event.target.value || undefined } }, 'The subject Block was rejected.')}
                     className="rounded border border-neutral-700 bg-neutral-950 px-1 py-0.5"
                   >

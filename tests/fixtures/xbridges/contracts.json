@@ -5124,12 +5124,7 @@
     }
    }
   ],
-  "parameters": {
-   "diagMode": {
-    "kind": "string",
-    "value": "extract"
-   }
-  },
+  "parameters": {},
   "state": null,
   "initialState": {
    "kind": "undefined",
@@ -5184,12 +5179,7 @@
     }
    }
   ],
-  "parameters": {
-   "diagMode": {
-    "kind": "string",
-    "value": "extract"
-   }
-  },
+  "parameters": {},
   "state": null,
   "initialState": {
    "kind": "undefined",
@@ -5427,12 +5417,7 @@
     }
    }
   ],
-  "parameters": {
-   "diagMode": {
-    "kind": "string",
-    "value": "extract"
-   }
-  },
+  "parameters": {},
   "state": null,
   "initialState": {
    "kind": "undefined",
@@ -5900,7 +5885,24 @@
  },
  "FLUX_REFERENCE": {
   "type": "FLUX_REFERENCE",
-  "inputs": [],
+  "inputs": [
+   {
+    "id": "speed",
+    "name": "ω",
+    "direction": "input",
+    "type": "measurement",
+    "unit": "rad/s",
+    "dimensions": null,
+    "position": "left",
+    "dataType": null,
+    "frame": null,
+    "sampleRate": null,
+    "initialValue": {
+     "kind": "number",
+     "value": 0
+    }
+   }
+  ],
   "outputs": [
    {
     "id": "id_ref",
@@ -5920,6 +5922,10 @@
    }
   ],
   "parameters": {
+   "base_speed": {
+    "kind": "number",
+    "value": 100
+   },
    "mode": {
     "kind": "string",
     "value": "constant"
@@ -5936,7 +5942,7 @@
   },
   "flags": {
    "isStateful": false,
-   "directFeedthrough": null,
+   "directFeedthrough": true,
    "allowDynamicInputs": false,
    "allowDynamicOutputs": false,
    "evaluateDerivatives": false,
@@ -10385,12 +10391,7 @@
     }
    }
   ],
-  "parameters": {
-   "diagMode": {
-    "kind": "string",
-    "value": "create"
-   }
-  },
+  "parameters": {},
   "state": null,
   "initialState": {
    "kind": "undefined",

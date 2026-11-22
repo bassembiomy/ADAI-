@@ -304,6 +304,15 @@ const fzTrimf = (x: number, a: number, b: number, c: number): number => {
   const m = fzMax(fzMin((x - a) / (b - a), (c - x) / (c - b)), 0);
   return Number.isNaN(m) ? 0 : m;
 };
+
+/** MatrixDiag / Diag / DiagExtract / ExtractDiag follow MATLAB diag: a vector builds a diagonal matrix, a matrix gives its diagonal (D17). A stray diagMode param is ignored. */
+const diagFactory = (id: string, type: string): XBlock => ({
+  id, type,
+  params: {},
+  inputs: [createPort('in', 'In', 'input')],
+  outputs: [createPort('out', 'Out', 'output')],
+  execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
+});
 const fzTrapmf = (x: number, a: number, b: number, c: number, d: number): number => {
   if (a === b && b === c && c === d) return x === a ? 1 : 0; // singleton: 1 at the point
   const m = fzMax(fzMin((x - a) / (b - a), 1, (d - x) / (d - c)), 0);
@@ -2951,37 +2960,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
   },
 
-  'MatrixDiag': (id, params) => ({
-    id, type: 'MatrixDiag',
-    params: { diagMode: params.diagMode ?? 'create' },
-    inputs: [createPort('in', 'In', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
-  }),
-
-  'DiagExtract': (id, params) => ({
-    id, type: 'DiagExtract',
-    params: { diagMode: params.diagMode ?? 'extract' },
-    inputs: [createPort('in', 'In', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
-  }),
-
-  'ExtractDiag': (id, params) => ({
-    id, type: 'ExtractDiag',
-    params: { diagMode: params.diagMode ?? 'extract' },
-    inputs: [createPort('in', 'In', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
-  }),
-
-  'Diag': (id, params) => ({
-    id, type: 'Diag',
-    params: { diagMode: params.diagMode ?? 'extract' },
-    inputs: [createPort('in', 'In', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
-  }),
+  'MatrixDiag': (id, params) => diagFactory(id, 'MatrixDiag'),
+  'DiagExtract': (id, params) => diagFactory(id, 'DiagExtract'),
+  'ExtractDiag': (id, params) => diagFactory(id, 'ExtractDiag'),
+  'Diag': (id, params) => diagFactory(id, 'Diag'),
 
   'IdentityMatrix': (id, params) => ({
     id, type: 'IdentityMatrix',
@@ -3881,13 +3863,22 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'FLUX_REFERENCE': (id, params) => ({
-    id, type: 'FLUX_REFERENCE',
-    params: { mode: params.mode || 'constant', value: params.value || 0 },
-    inputs: [],
-    outputs: [createPort('id_ref', 'Id*', 'output', params.value || 0, 'right', 'continuous')],
-    execute: (_, p) => {
-      // In a real implementation, 'field_weakening' would adjust 'value' based on speed.
-      return { outputs: [Number(p.value)] };
+    id, type: 'FLUX_REFERENCE', directFeedthrough: true,
+    params: { mode: params.mode ?? 'constant', value: params.value ?? 0, base_speed: params.base_speed ?? 100 },
+    inputs: [createPort('speed', 'ω', 'input', 0, 'left', 'measurement')],
+    outputs: [createPort('id_ref', 'Id*', 'output', params.value ?? 0, 'right', 'continuous')],
+    execute: (ins, p) => {
+      const rated = Number(p.value);
+      if (!Number.isFinite(rated)) return { outputs: [NaN], error: 'FLUX_REFERENCE: value must be a finite number.' };
+      if (p.mode === 'constant') return { outputs: [rated] };
+      if (p.mode !== 'field_weakening') return { outputs: [NaN], error: `FLUX_REFERENCE: unsupported mode '${String(p.mode)}' (constant | field_weakening).` };
+      // Field weakening: rated reference up to the base speed, rated * base_speed / |speed| above it (constant power region).
+      const base = Number(p.base_speed);
+      if (!Number.isFinite(base) || base <= 0) return { outputs: [NaN], error: 'FLUX_REFERENCE: base_speed must be a finite number above zero.' };
+      const speed = Number(ins[0] ?? 0);
+      if (!Number.isFinite(speed)) return { outputs: [NaN], error: 'FLUX_REFERENCE: the speed input must be a finite number.' };
+      const w = Math.abs(speed);
+      return { outputs: [w <= base ? rated : rated * base / w] };
     }
   }),
 
@@ -10618,6 +10609,7 @@ execute: (ins, p, state) => {
         const outputMFs = p.outputMFs || [];
         const rules = p.rules || [];
         const andMethod = p.andMethod || 'min';
+        const orMethod = p.orMethod || 'max';
         const defuzzMethod = p.defuzzMethod || 'centroid';
         const resolution = numParam(p.defuzzResolution, 101);
 
@@ -10634,9 +10626,13 @@ execute: (ins, p, state) => {
             return (inputGrades[inputIdx] || [])[mfIdx] || 0;
           });
           const weight = Number(rule.weight ?? 1);
-          const strength = andMethod === 'product'
-            ? antecedentGrades.reduce((acc: number, v: number) => acc * v, 1)
-            : Math.min(...antecedentGrades);
+          // A rule with operator 'OR' combines its antecedents with orMethod (max | probor); every other rule uses andMethod.
+          const isOr = String(rule.operator ?? 'AND') === 'OR';
+          const strength = isOr
+            ? (orMethod === 'probor' ? antecedentGrades.reduce((acc: number, v: number) => acc + v - acc * v, 0) : Math.max(...antecedentGrades))
+            : andMethod === 'product'
+              ? antecedentGrades.reduce((acc: number, v: number) => acc * v, 1)
+              : Math.min(...antecedentGrades);
           return strength * weight;
         });
 
@@ -12518,7 +12514,7 @@ const CATALOGUE_EQUATIONS: Readonly<Record<string, string>> = {
   VOLTAGE_REFERENCE_GENERATOR: 'Va = A sin(2 pi f t), Vb = A sin(2 pi f t - 2 pi / 3), Vc = A sin(2 pi f t - 4 pi / 3)',
   CURRENT_CONTROLLER_DQ: 'the reference (id*, iq*) is scaled to magnitude iMax when larger; Vd = Kp_d (id* - id) + Ki_d integral(id* - id) dt, Vq = Kp_q (iq* - iq) + Ki_q integral(iq* - iq) dt',
   SPEED_CONTROLLER: 'Iq* = clamp(Kp (w* - w) + Ki integral(w* - w) dt, -maxIq, maxIq)',
-  FLUX_REFERENCE: 'Id* = value (constant)',
+  FLUX_REFERENCE: 'constant: Id* = value; field_weakening: Id* = value for |ω| <= base_speed, Id* = value * base_speed / |ω| above the base speed',
   PARK_TRANSFORM: 'Id = Ialpha cos(theta) + Ibeta sin(theta); Iq = -Ialpha sin(theta) + Ibeta cos(theta)',
   INVERSE_PARK: 'Valpha = Vd cos(theta) - Vq sin(theta); Vbeta = Vd sin(theta) + Vq cos(theta)',
   INVERSE_CLARKE: 'Va = Valpha; Vb = -Valpha / 2 + (sqrt(3) / 2) Vbeta; Vc = -Valpha / 2 - (sqrt(3) / 2) Vbeta',
@@ -12686,7 +12682,7 @@ const CATALOGUE_PORT_UNITS: Readonly<Record<string, Readonly<Record<string, stri
   FABRIC_HARMONIC_ANALYZER: { dem_positions: 'm', dem_velocities: 'm/s', fluid_forces: 'N', drum_state: 'none', vibration_amplitude: 'm', eccentricity: 'm' },
   FIELD_ORIENTED_CONTROL: { id_ref: 'A', iq_ref: 'A', ia: 'A', ib: 'A', theta: 'rad', vd: 'V', vq: 'V', va_ref: 'V', vb_ref: 'V', vc_ref: 'V' },
   FIELD_WEAKENING: { v_mag: 'V', id_base: 'A', id_ref: 'A' },
-  FLUX_REFERENCE: { id_ref: 'A' },
+  FLUX_REFERENCE: { speed: 'rad/s', id_ref: 'A' },
   FUZZY_AND: { in1: '1', in2: '1', out: '1' },
   FUZZY_DEFUZZIFY: { agg: '1', y: 'inherit' },
   FUZZY_INFERENCE_SYSTEM: { x1: 'inherit', x2: 'inherit', y: 'inherit', strengths: '1' },

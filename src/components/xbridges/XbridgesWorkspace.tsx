@@ -3676,7 +3676,7 @@ export const XbridgesWorkspace: React.FC<{
                 <>
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Rel Tol</span>
-                <input
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:a1623755ef69"
                   type="text"
                   value={solverOptionTexts.relative}
                   onChange={e => setSolverOptionText('relative', e.target.value)}
@@ -3688,7 +3688,7 @@ export const XbridgesWorkspace: React.FC<{
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Abs Tol</span>
-                <input
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:c520f1d4b921"
                   type="text"
                   value={solverOptionTexts.absolute}
                   onChange={e => setSolverOptionText('absolute', e.target.value)}
@@ -3700,7 +3700,7 @@ export const XbridgesWorkspace: React.FC<{
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Max Step</span>
-                <input
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b"
                   type="text"
                   value={solverOptionTexts.maxStep}
                   onChange={e => setSolverOptionText('maxStep', e.target.value)}
@@ -3716,7 +3716,7 @@ export const XbridgesWorkspace: React.FC<{
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Min Step</span>
-                <input
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:c148cf0affa4"
                   type="text"
                   value={solverOptionTexts.minStep}
                   onChange={e => setSolverOptionText('minStep', e.target.value)}
@@ -3736,7 +3736,7 @@ export const XbridgesWorkspace: React.FC<{
                 <>
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Extrap. Order</span>
-                <input
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:932393242023"
                   type="text"
                   value={solverOptionTexts.extrapolationOrder}
                   onChange={e => setSolverOptionText('extrapolationOrder', e.target.value)}
@@ -3748,7 +3748,7 @@ export const XbridgesWorkspace: React.FC<{
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Newton Iter.</span>
-                <input
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:e5d9363ae480"
                   type="text"
                   value={solverOptionTexts.newtonIterations}
                   onChange={e => setSolverOptionText('newtonIterations', e.target.value)}

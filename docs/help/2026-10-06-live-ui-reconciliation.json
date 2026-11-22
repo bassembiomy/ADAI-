@@ -1,6 +1,6 @@
 {
   "files": 109,
-  "fingerprint": "9745df8b80d05b3bd1ff2f3bc22817ba701637d1439f5e8c0016686e0a92afe4",
+  "fingerprint": "95bcb0344d4b68c7761045e9b42c85ef6d95e575a92529614029509ac3dba80b",
   "items": [
     {
       "source": "src/App.tsx",
@@ -1382,12 +1382,12 @@
       "handlers": {
         "onWheel": "{handleHorizontalToolbarWheel}"
       },
-      "id": "live:App:2baeda448e81",
+      "feature": "live:App:2baeda448e81",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:App:2baeda448e81"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/App.tsx",
@@ -2337,12 +2337,12 @@
       "handlers": {
         "onWheel": "{handleHorizontalToolbarWheel}"
       },
-      "id": "live:App:34ecff87bb82",
+      "feature": "live:App:34ecff87bb82",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:App:34ecff87bb82"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/App.tsx",
@@ -2716,12 +2716,12 @@
       "handlers": {
         "onWheel": "{handleHorizontalToolbarWheel}"
       },
-      "id": "live:App:2baeda448e81",
+      "feature": "live:App:2baeda448e81",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:App:2baeda448e81"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/App.tsx",
@@ -18223,12 +18223,12 @@
         "onChange": "{event => setDescriptionDraft({ id: selectedUseCase.id, value: event.target.value })}",
         "onBlur": "{commitDescription}"
       },
-      "id": "sysml:element:UseCase",
+      "feature": "sysml:element:UseCase",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
       "featureIds": [
         "sysml:element:UseCase"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/sysml/UseCaseWorkspace.tsx",
@@ -18238,12 +18238,12 @@
       "handlers": {
         "onChange": "{event => execute({ type: 'updateElement', elementId: selectedSubject.id, patch: { realizedByBlockId: event.target.value || undefined } }, 'The subject Block was rejected.')}"
       },
-      "id": "behavior:element:usecase:subject",
+      "feature": "behavior:element:usecase:subject",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation (2026-10-19 release review).",
       "featureIds": [
         "behavior:element:usecase:subject"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/sysml/UseCaseWorkspace.tsx",
@@ -21586,7 +21586,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 406,
+      "line": 420,
       "tag": "button",
       "signature": "button|onClick:{handleToggleCollapse}",
       "handlers": {
@@ -21601,7 +21601,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 414,
+      "line": 428,
       "tag": "button",
       "signature": "button|onClick:{onClose}",
       "handlers": {
@@ -21616,7 +21616,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 421,
+      "line": 435,
       "tag": "div",
       "signature": "div|onMouseDown:{handleMouseDown}|onMouseLeave:{handleMouseLeave}|onMouseMove:{handleMouseMove}|onMouseUp:{handleMouseUp}",
       "handlers": {
@@ -21634,7 +21634,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 435,
+      "line": 449,
       "tag": "input",
       "signature": "input|onChange:{handleLabelChange}",
       "handlers": {
@@ -21649,7 +21649,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 453,
+      "line": 467,
       "tag": "button",
       "signature": "button|onClick:{onLaunchDoe}",
       "handlers": {
@@ -21664,7 +21664,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 527,
+      "line": 541,
       "tag": "button",
       "signature": "button|onClick:{addSignedInput}",
       "handlers": {
@@ -21679,7 +21679,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 545,
+      "line": 559,
       "tag": "button",
       "signature": "button|onClick:{()=>toggleSign(idx)}",
       "handlers": {
@@ -21694,7 +21694,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 560,
+      "line": 574,
       "tag": "button",
       "signature": "button|onClick:{()=>removeSignedInput(idx)}",
       "handlers": {
@@ -21709,7 +21709,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 591,
+      "line": 605,
       "tag": "button",
       "signature": "button|onClick:{()=>addArrayParam('numerator')}",
       "handlers": {
@@ -21724,7 +21724,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 601,
+      "line": 615,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateArrayParam('numerator',idx,Number(e.target.value))}",
       "handlers": {
@@ -21739,7 +21739,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 609,
+      "line": 623,
       "tag": "button",
       "signature": "button|onClick:{()=>removeArrayParam('numerator',idx)}",
       "handlers": {
@@ -21754,7 +21754,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 619,
+      "line": 633,
       "tag": "input",
       "signature": "input|onBlur:{(e)=>handleRawArrayInput('numerator',e.target.value)}",
       "handlers": {
@@ -21769,7 +21769,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 632,
+      "line": 646,
       "tag": "button",
       "signature": "button|onClick:{()=>addArrayParam('denominator')}",
       "handlers": {
@@ -21784,7 +21784,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 642,
+      "line": 656,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateArrayParam('denominator',idx,Number(e.target.value))}",
       "handlers": {
@@ -21799,7 +21799,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 650,
+      "line": 664,
       "tag": "button",
       "signature": "button|onClick:{()=>removeArrayParam('denominator',idx)}",
       "handlers": {
@@ -21814,7 +21814,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 660,
+      "line": 674,
       "tag": "input",
       "signature": "input|onBlur:{(e)=>handleRawArrayInput('denominator',e.target.value)}",
       "handlers": {
@@ -21829,7 +21829,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 675,
+      "line": 689,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,gain:Number(e.target.value)}})}",
       "handlers": {
@@ -21844,7 +21844,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 684,
+      "line": 698,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,gain:Number(e.target.value)}})}",
       "handlers": {
@@ -21859,7 +21859,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 697,
+      "line": 711,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,maxGain:Math.max(1,Number(e.target.value))}})}",
       "handlers": {
@@ -21874,7 +21874,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 716,
+      "line": 730,
       "tag": "input",
       "signature": "input|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,gain:Number(e.target.value)||1}})}",
       "handlers": {
@@ -21889,7 +21889,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 729,
+      "line": 743,
       "tag": "button",
       "signature": "button|onClick:{()=>addArrayParam('zeros')}",
       "handlers": {
@@ -21904,7 +21904,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 742,
+      "line": 756,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateArrayParam('zeros',idx,Number(e.target.value))}",
       "handlers": {
@@ -21919,7 +21919,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 749,
+      "line": 763,
       "tag": "button",
       "signature": "button|onClick:{()=>removeArrayParam('zeros',idx)}",
       "handlers": {
@@ -21934,7 +21934,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 759,
+      "line": 773,
       "tag": "input",
       "signature": "input|onBlur:{(e)=>handleRawArrayInput('zeros',e.target.value)}",
       "handlers": {
@@ -21949,7 +21949,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 772,
+      "line": 786,
       "tag": "button",
       "signature": "button|onClick:{()=>addArrayParam('poles')}",
       "handlers": {
@@ -21964,7 +21964,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 782,
+      "line": 796,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updateArrayParam('poles',idx,Number(e.target.value))}",
       "handlers": {
@@ -21979,7 +21979,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 790,
+      "line": 804,
       "tag": "button",
       "signature": "button|onClick:{()=>removeArrayParam('poles',idx)}",
       "handlers": {
@@ -21994,7 +21994,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 800,
+      "line": 814,
       "tag": "input",
       "signature": "input|onBlur:{(e)=>handleRawArrayInput('poles',e.target.value)}",
       "handlers": {
@@ -22009,7 +22009,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 839,
+      "line": 853,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,[key]:e.target.value}})}",
       "handlers": {
@@ -22024,7 +22024,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 857,
+      "line": 871,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,[key]:e.target.value}})}",
       "handlers": {
@@ -22039,7 +22039,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 889,
+      "line": 904,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,[key]:e.target.value}})}",
       "handlers": {
@@ -22054,7 +22054,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 900,
+      "line": 915,
       "tag": "select",
       "signature": "select|onChange:{(e)=>{letval:any=e.target.value;if(val==='true')val=true;if(val==='false')val=false;onUpdate(block.id,{params:{...block.params,[key]:val}});}}",
       "handlers": {
@@ -22069,7 +22069,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1209,
+      "line": 1218,
       "tag": "select",
       "signature": "select|onChange:{(e)=>onUpdate(block.id,{params:{...block.params,[key]:e.target.value}})}",
       "handlers": {
@@ -22084,7 +22084,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1219,
+      "line": 1228,
       "tag": "textarea",
       "signature": "textarea|onChange:{(e)=>{setLocalInputValues(prev=>({...prev,[key]:e.target.value}));onUpdate(block.id,{params:{...block.params,[key]:e.target.value}});}}",
       "handlers": {
@@ -22099,12 +22099,12 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1230,
+      "line": 1239,
       "tag": "input",
-      "signature": "input|onBlur:{(e)=>{//Onblur,alwayscommitthefinalvalueconstraw=normalizeNumerals(e.target.value);consttrimmedRaw=raw.trim();letval:any=raw;if(trimmedRaw!==''&&!isNaN(Number(trimmedRaw))){val=Number(trimmedRaw);}elseif(trimmedRaw.startsWith('[')||trimmedRaw.startsWith('{')){try{val=VectorUtils.parseMatlabArray(trimmedRaw);}catch{val=raw;}}//Invalidtextinanumericparametermustnotoverwritethestorednumber:theerrorstaysshown//andthestoredvalueiskeptuntilthetextisvalid(Simulinkrefusesabaddialogvalue).constnotNumeric=typeofval==='string'&&!(trimmedRaw.startsWith('[')||trimmedRaw.startsWith('{'));constrejected=notNumeric&&(paramKind?!evaluateParameter(raw,paramKind).ok:typeofdisplayValue==='number');if(rejected){setLocalInputValues(prev=>({...prev,[key]:raw}));onInvalidParameter?.(block.id,key,raw);return;}onInvalidParameter?.(block.id,key,null);letfinalVal=val;if(isObjectParam){finalVal={...block.params[key],value:val};}onUpdate(block.id,{params:{...block.params,[key]:finalVal}});//SynclocaldisplaytocommittedvaluesoitshowscleanformsetLocalInputValues(prev=>({...prev,[key]:String(typeoffinalVal==='object'?JSON.stringify(finalVal):finalVal)}));}}|onChange:{(e)=>{constraw=normalizeNumerals(e.target.value);//UpdatethelocaldisplaystringimmediatelysetLocalInputValues(prev=>({...prev,[key]:raw}));consttrimmedRaw=raw.trim();//1.Donotcommitarrays/matricesormulti-wordinputsmid-typingif(trimmedRaw.startsWith('[')||trimmedRaw.includes('')||trimmedRaw.includes(';')){return;}//2.Donotcommitincompletenumbersmid-typingif(raw===''||raw==='-'||raw.endsWith('.')||raw.endsWith('e')||raw.endsWith('e-')||raw.endsWith('e+')){return;}//3.Commitvalidscalarnumberstoallowreal-timetuningif(!isNaN(Number(trimmedRaw))){constval=Number(trimmedRaw);letfinalVal=val;if(isObjectParam){finalVal={...block.params[key],value:val};}onUpdate(block.id,{params:{...block.params,[key]:finalVal}});onInvalidParameter?.(block.id,key,null);}}}|onKeyDown:{(e)=>{if(e.key==='Enter'){(e.targetasHTMLInputElement).blur();}}}",
+      "signature": "input|onBlur:{(e)=>{//Onblur,alwayscommitthefinalvalueconstraw=normalizeNumerals(e.target.value);consttrimmedRaw=raw.trim();letval:any=raw;if(trimmedRaw!==''&&!isNaN(Number(trimmedRaw))){val=Number(trimmedRaw);}elseif(trimmedRaw.startsWith('[')||trimmedRaw.startsWith('{')){try{val=VectorUtils.parseMatlabArray(trimmedRaw);}catch{val=raw;}}//Invalidtextinanumericparametermustnotoverwritethestorednumber:theerrorstaysshown//andthestoredvalueiskeptuntilthetextisvalid(Simulinkrefusesabaddialogvalue).constnotNumeric=typeofval==='string'&&!(trimmedRaw.startsWith('[')||trimmedRaw.startsWith('{'));constoutOfRange=!!ptKind&&!notNumeric&&!evaluateParameter(raw,ptKind).ok;constrejected=notNumeric&&(paramKind?!evaluateParameter(raw,paramKind).ok:typeofdisplayValue==='number');if(rejected||outOfRange){//Restorethepre-editvaluewhenanin-rangeprefixreplaceditwhiletyping.constedit=lastInRangeRef.current[key];if(ptKind&&edit?.committed){onUpdate(block.id,{params:{...block.params,[key]:edit.before}});edit.committed=false;}setLocalInputValues(prev=>({...prev,[key]:raw}));onInvalidParameter?.(block.id,key,raw);return;}deletelastInRangeRef.current[key];onInvalidParameter?.(block.id,key,null);letfinalVal=val;if(isObjectParam){finalVal={...block.params[key],value:val};}onUpdate(block.id,{params:{...block.params,[key]:finalVal}});//SynclocaldisplaytocommittedvaluesoitshowscleanformsetLocalInputValues(prev=>({...prev,[key]:String(typeoffinalVal==='object'?JSON.stringify(finalVal):finalVal)}));}}|onChange:{(e)=>{constraw=normalizeNumerals(e.target.value);//UpdatethelocaldisplaystringimmediatelysetLocalInputValues(prev=>({...prev,[key]:raw}));consttrimmedRaw=raw.trim();//1.Donotcommitarrays/matricesormulti-wordinputsmid-typingif(trimmedRaw.startsWith('[')||trimmedRaw.includes('')||trimmedRaw.includes(';')){return;}//2.Donotcommitincompletenumbersmid-typingif(raw===''||raw==='-'||raw.endsWith('.')||raw.endsWith('e')||raw.endsWith('e-')||raw.endsWith('e+')){return;}//3.Commitvalidscalarnumberstoallowreal-timetuningif(!isNaN(Number(trimmedRaw))){constval=Number(trimmedRaw);//Abounded(range)parameterkeepsthevaluestoredbeforetheedit;avalueoutsidetherangeisnevercommitted.if(ptKind){if(!(keyinlastInRangeRef.current))lastInRangeRef.current[key]={before:block.params[key],committed:false};if(!evaluateParameter(trimmedRaw,ptKind).ok){onInvalidParameter?.(block.id,key,raw);return;}lastInRangeRef.current[key].committed=true;}letfinalVal=val;if(isObjectParam){finalVal={...block.params[key],value:val};}onUpdate(block.id,{params:{...block.params,[key]:finalVal}});onInvalidParameter?.(block.id,key,null);}}}|onKeyDown:{(e)=>{if(e.key==='Enter'){(e.targetasHTMLInputElement).blur();}}}",
       "handlers": {
-        "onChange": "{(e) => {\n                        const raw = normalizeNumerals(e.target.value);\n                        // Update the local display string immediately\n                        setLocalInputValues(prev => ({ ...prev, [key]: raw }));\n\n                        const trimmedRaw = raw.trim();\n                        \n                        // 1. Do not commit arrays/matrices or multi-word inputs mid-typing\n                        if (trimmedRaw.startsWith('[') || trimmedRaw.includes(' ') || trimmedRaw.includes(';')) {\n                          return;\n                        }\n\n                        // 2. Do not commit incomplete numbers mid-typing\n                        if (raw === '' || raw === '-' || raw.endsWith('.') || raw.endsWith('e') || raw.endsWith('e-') || raw.endsWith('e+')) {\n                          return;\n                        }\n\n                        // 3. Commit valid scalar numbers to allow real-time tuning\n                        if (!isNaN(Number(trimmedRaw))) {\n                          const val = Number(trimmedRaw);\n                          let finalVal = val;\n                          if (isObjectParam) {\n                            finalVal = { ...block.params[key], value: val };\n                          }\n                          onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\n                          onInvalidParameter?.(block.id, key, null);\n                        }\n                      }}",
-        "onBlur": "{(e) => {\n                        // On blur, always commit the final value\n                        const raw = normalizeNumerals(e.target.value);\n                        const trimmedRaw = raw.trim();\n                        let val: any = raw;\n                        if (trimmedRaw !== '' && !isNaN(Number(trimmedRaw))) {\n                          val = Number(trimmedRaw);\n                        } else if (trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{')) {\n                           try {\n                             val = VectorUtils.parseMatlabArray(trimmedRaw);\n                           } catch {\n                             val = raw;\n                           }\n                        }\n                        // Invalid text in a numeric parameter must not overwrite the stored number: the error stays shown\n                        // and the stored value is kept until the text is valid (Simulink refuses a bad dialog value).\n                        const notNumeric = typeof val === 'string' && !(trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{'));\n                        const rejected = notNumeric && (paramKind ? !evaluateParameter(raw, paramKind).ok : typeof displayValue === 'number');\n                        if (rejected) {\n                          setLocalInputValues(prev => ({ ...prev, [key]: raw }));\n                          onInvalidParameter?.(block.id, key, raw);\n                          return;\n                        }\n                        onInvalidParameter?.(block.id, key, null);\n                        let finalVal = val;\n                        if (isObjectParam) {\n                          finalVal = { ...block.params[key], value: val };\n                        }\n                        onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\n                        // Sync local display to committed value so it shows clean form\n                        setLocalInputValues(prev => ({ ...prev, [key]: String(typeof finalVal === 'object' ? JSON.stringify(finalVal) : finalVal) }));\n                      }}",
+        "onChange": "{(e) => {\n                        const raw = normalizeNumerals(e.target.value);\n                        // Update the local display string immediately\n                        setLocalInputValues(prev => ({ ...prev, [key]: raw }));\n\n                        const trimmedRaw = raw.trim();\n                        \n                        // 1. Do not commit arrays/matrices or multi-word inputs mid-typing\n                        if (trimmedRaw.startsWith('[') || trimmedRaw.includes(' ') || trimmedRaw.includes(';')) {\n                          return;\n                        }\n\n                        // 2. Do not commit incomplete numbers mid-typing\n                        if (raw === '' || raw === '-' || raw.endsWith('.') || raw.endsWith('e') || raw.endsWith('e-') || raw.endsWith('e+')) {\n                          return;\n                        }\n\n                        // 3. Commit valid scalar numbers to allow real-time tuning\n                        if (!isNaN(Number(trimmedRaw))) {\n                          const val = Number(trimmedRaw);\n                          // A bounded (range) parameter keeps the value stored before the edit; a value outside the range is never committed.\n                          if (ptKind) {\n                            if (!(key in lastInRangeRef.current)) lastInRangeRef.current[key] = { before: block.params[key], committed: false };\n                            if (!evaluateParameter(trimmedRaw, ptKind).ok) {\n                              onInvalidParameter?.(block.id, key, raw);\n                              return;\n                            }\n                            lastInRangeRef.current[key].committed = true;\n                          }\n                          let finalVal = val;\n                          if (isObjectParam) {\n                            finalVal = { ...block.params[key], value: val };\n                          }\n                          onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\n                          onInvalidParameter?.(block.id, key, null);\n                        }\n                      }}",
+        "onBlur": "{(e) => {\n                        // On blur, always commit the final value\n                        const raw = normalizeNumerals(e.target.value);\n                        const trimmedRaw = raw.trim();\n                        let val: any = raw;\n                        if (trimmedRaw !== '' && !isNaN(Number(trimmedRaw))) {\n                          val = Number(trimmedRaw);\n                        } else if (trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{')) {\n                           try {\n                             val = VectorUtils.parseMatlabArray(trimmedRaw);\n                           } catch {\n                             val = raw;\n                           }\n                        }\n                        // Invalid text in a numeric parameter must not overwrite the stored number: the error stays shown\n                        // and the stored value is kept until the text is valid (Simulink refuses a bad dialog value).\n                        const notNumeric = typeof val === 'string' && !(trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{'));\n                        const outOfRange = !!ptKind && !notNumeric && !evaluateParameter(raw, ptKind).ok;\n                        const rejected = notNumeric && (paramKind ? !evaluateParameter(raw, paramKind).ok : typeof displayValue === 'number');\n                        if (rejected || outOfRange) {\n                          // Restore the pre-edit value when an in-range prefix replaced it while typing.\n                          const edit = lastInRangeRef.current[key];\n                          if (ptKind && edit?.committed) {\n                            onUpdate(block.id, { params: { ...block.params, [key]: edit.before } });\n                            edit.committed = false;\n                          }\n                          setLocalInputValues(prev => ({ ...prev, [key]: raw }));\n                          onInvalidParameter?.(block.id, key, raw);\n                          return;\n                        }\n                        delete lastInRangeRef.current[key];\n                        onInvalidParameter?.(block.id, key, null);\n                        let finalVal = val;\n                        if (isObjectParam) {\n                          finalVal = { ...block.params[key], value: val };\n                        }\n                        onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });\n                        // Sync local display to committed value so it shows clean form\n                        setLocalInputValues(prev => ({ ...prev, [key]: String(typeof finalVal === 'object' ? JSON.stringify(finalVal) : finalVal) }));\n                      }}",
         "onKeyDown": "{(e) => {\n                        if (e.key === 'Enter') {\n                          (e.target as HTMLInputElement).blur();\n                        }\n                      }}"
       },
       "feature": "ui:xbridges/XbridgesPropertiesPanel:0f948317825a",
@@ -22116,7 +22116,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1327,
+      "line": 1353,
       "tag": "button",
       "signature": "button|onClick:{handleAddInput}",
       "handlers": {
@@ -22131,7 +22131,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1347,
+      "line": 1373,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updatePortName(port.id,e.target.value,true)}",
       "handlers": {
@@ -22146,7 +22146,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1355,
+      "line": 1381,
       "tag": "button",
       "signature": "button|onClick:{()=>handleRemoveInput(port.id)}",
       "handlers": {
@@ -22161,7 +22161,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1368,
+      "line": 1394,
       "tag": "button",
       "signature": "button|onClick:{handleAddOutput}",
       "handlers": {
@@ -22176,7 +22176,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1388,
+      "line": 1414,
       "tag": "input",
       "signature": "input|onChange:{(e)=>updatePortName(port.id,e.target.value,false)}",
       "handlers": {
@@ -22191,7 +22191,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1396,
+      "line": 1422,
       "tag": "button",
       "signature": "button|onClick:{()=>handleRemoveOutput(port.id)}",
       "handlers": {
@@ -22206,7 +22206,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesPropertiesPanel.tsx",
-      "line": 1442,
+      "line": 1468,
       "tag": "DoeSweeperPanel",
       "signature": "DoeSweeperPanel|onExportDoeData:{onExportDoeData}|onUpdate:{onUpdate}",
       "handlers": {
@@ -22610,7 +22610,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3343,
+      "line": 3328,
       "tag": "div",
       "signature": "div|onClick:{(e)=>e.stopPropagation()}",
       "handlers": {
@@ -22630,7 +22630,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3350,
+      "line": 3335,
       "tag": "input",
       "signature": "input|onChange:{(e)=>setSearchTerm(e.target.value)}|onKeyDown:{(e)=>{if(e.key==='Enter'&&filteredBlocks.length>0){addBlockAtPos(filteredBlocks[0].type,searchMenuPos.x,searchMenuPos.y);}elseif(e.key==='Escape'){setSearchMenuPos(null);}}}",
       "handlers": {
@@ -22646,7 +22646,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3367,
+      "line": 3352,
       "tag": "div",
       "signature": "div|onClick:{()=>addBlockAtPos(b.type,searchMenuPos.x,searchMenuPos.y)}",
       "handlers": {
@@ -22661,7 +22661,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3407,
+      "line": 3392,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLibCollapsed(!isLibCollapsed)}",
       "handlers": {
@@ -22676,7 +22676,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3421,
+      "line": 3406,
       "tag": "input",
       "signature": "input|onChange:{(e)=>setSearchTerm(e.target.value)}",
       "handlers": {
@@ -22691,7 +22691,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3434,
+      "line": 3419,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveSidebarTab('library')}",
       "handlers": {
@@ -22706,7 +22706,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3444,
+      "line": 3429,
       "tag": "button",
       "signature": "button|onClick:{()=>setActiveSidebarTab('labs')}",
       "handlers": {
@@ -22721,7 +22721,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3463,
+      "line": 3448,
       "tag": "button",
       "signature": "button|onClick:{()=>toggleCategory(cat.name)}",
       "handlers": {
@@ -22736,7 +22736,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3477,
+      "line": 3462,
       "tag": "div",
       "signature": "div|onDragStart:{(e)=>onDragStart(e,b.type)}",
       "handlers": {
@@ -22751,7 +22751,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3509,
+      "line": 3494,
       "tag": "div",
       "signature": "div|onClick:{()=>loadLabTemplate(lab.id)}",
       "handlers": {
@@ -22766,7 +22766,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3548,
+      "line": 3533,
       "tag": "div",
       "signature": "div|onWheel:{handleHorizontalToolbarWheel}",
       "handlers": {
@@ -22781,7 +22781,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3554,
+      "line": 3539,
       "tag": "button",
       "signature": "button|onClick:{()=>!coSimEngine&&setIsSimulating(!isSimulating)}",
       "handlers": {
@@ -22796,7 +22796,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3568,
+      "line": 3553,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsPaused(!isPaused)}",
       "handlers": {
@@ -22811,7 +22811,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3579,
+      "line": 3564,
       "tag": "button",
       "signature": "button|onClick:{stepSimulation}",
       "handlers": {
@@ -22826,7 +22826,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3601,
+      "line": 3586,
       "tag": "select",
       "signature": "select|onChange:{e=>setSolverType(e.target.valueasany)}",
       "handlers": {
@@ -22841,7 +22841,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3625,
+      "line": 3610,
       "tag": "select",
       "signature": "select|onChange:{e=>{constnewType=e.target.valueasany;setEdgeType(newType);setEdges(eds=>eds.map(edge=>({...edge,type:newType})));}}",
       "handlers": {
@@ -22856,7 +22856,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3643,
+      "line": 3628,
       "tag": "button",
       "signature": "button|onClick:{()=>setSnapEnabled(prev=>!prev)}",
       "handlers": {
@@ -22871,7 +22871,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3661,
+      "line": 3646,
       "tag": "input",
       "signature": "input|onChange:{e=>setStartTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -22886,7 +22886,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3677,
+      "line": 3662,
       "tag": "input",
       "signature": "input|onChange:{e=>setStopTimeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -22901,67 +22901,97 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3694,
+      "line": 3679,
       "tag": "input",
       "signature": "input|onChange:{e=>setSolverOptionText('relative',e.target.value)}",
       "handlers": {
         "onChange": "{e => setSolverOptionText('relative', e.target.value)}"
       },
-      "id": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
+      "feature": "live:components/xbridges/XbridgesWorkspace:a1623755ef69",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:components/xbridges/XbridgesWorkspace:a1623755ef69"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3706,
+      "line": 3691,
       "tag": "input",
       "signature": "input|onChange:{e=>setSolverOptionText('absolute',e.target.value)}",
       "handlers": {
         "onChange": "{e => setSolverOptionText('absolute', e.target.value)}"
       },
-      "id": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
+      "feature": "live:components/xbridges/XbridgesWorkspace:c520f1d4b921",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:components/xbridges/XbridgesWorkspace:c520f1d4b921"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3722,
+      "line": 3703,
+      "tag": "input",
+      "signature": "input|onChange:{e=>setSolverOptionText('maxStep',e.target.value)}",
+      "handlers": {
+        "onChange": "{e => setSolverOptionText('maxStep', e.target.value)}"
+      },
+      "feature": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
+      "status": "documented",
+      "featureIds": [
+        "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b"
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
+    },
+    {
+      "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "line": 3719,
+      "tag": "input",
+      "signature": "input|onChange:{e=>setSolverOptionText('minStep',e.target.value)}",
+      "handlers": {
+        "onChange": "{e => setSolverOptionText('minStep', e.target.value)}"
+      },
+      "feature": "live:components/xbridges/XbridgesWorkspace:c148cf0affa4",
+      "status": "documented",
+      "featureIds": [
+        "live:components/xbridges/XbridgesWorkspace:c148cf0affa4"
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
+    },
+    {
+      "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "line": 3739,
       "tag": "input",
       "signature": "input|onChange:{e=>setSolverOptionText('extrapolationOrder',e.target.value)}",
       "handlers": {
         "onChange": "{e => setSolverOptionText('extrapolationOrder', e.target.value)}"
       },
-      "id": "live:components/xbridges/XbridgesWorkspace:932393242023",
+      "feature": "live:components/xbridges/XbridgesWorkspace:932393242023",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:components/xbridges/XbridgesWorkspace:932393242023"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3734,
+      "line": 3751,
       "tag": "input",
       "signature": "input|onChange:{e=>setSolverOptionText('newtonIterations',e.target.value)}",
       "handlers": {
         "onChange": "{e => setSolverOptionText('newtonIterations', e.target.value)}"
       },
-      "id": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+      "feature": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
       "status": "documented",
-      "reason": "Additional source handler reviewed against its component implementation.",
       "featureIds": [
         "live:components/xbridges/XbridgesWorkspace:e5d9363ae480"
-      ]
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3751,
+      "line": 3768,
       "tag": "input",
       "signature": "input|onChange:{e=>setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -22976,7 +23006,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3780,
+      "line": 3797,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowDiagnostics(v=>!v)}",
       "handlers": {
@@ -22991,7 +23021,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3803,
+      "line": 3820,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('push')}",
       "handlers": {
@@ -23006,7 +23036,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3811,
+      "line": 3828,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('pull')}",
       "handlers": {
@@ -23021,7 +23051,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3845,
+      "line": 3862,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(onSave)persistWorkspace(nodes,edges);onBack();}}",
       "handlers": {
@@ -23036,7 +23066,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3868,
+      "line": 3885,
       "tag": "button",
       "signature": "button|onClick:{()=>setViewPath(viewPath.slice(0,idx+1))}",
       "handlers": {
@@ -23051,7 +23081,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3882,
+      "line": 3899,
       "tag": "div",
       "signature": "div|onContextMenu:{(e)=>e.preventDefault()}",
       "handlers": {
@@ -23071,7 +23101,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3901,
+      "line": 3918,
       "tag": "ReactFlow",
       "signature": "ReactFlow|onConnect:{onConnect}|onDragOver:{(e)=>e.preventDefault()}|onDrop:{onDrop}|onEdgesChange:{onEdgesChange}|onInit:{setReactFlowInstance}|onNodeClick:{onNodeClick}|onNodeDoubleClick:{onNodeDoubleClick}|onNodeDragStop:{onNodeDragStop}|onNodesChange:{onNodesChange}|onNodesDelete:{onNodesDelete}|onPaneClick:{(e)=>{if(e.detail===2){setSearchMenuPos({x:e.clientX,y:e.clientY});}else{setSearchMenuPos(null);setSearchTerm('');}setSelectedNodeId(null);}}|onSelectionChange:{({nodes:selectedNodes})=>{if(selectedNodes.length===1){setSelectedNodeId(selectedNodes[0].id);}elseif(selectedNodes.length===0){setSelectedNodeId(null);}}}",
       "handlers": {
@@ -23097,7 +23127,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3972,
+      "line": 3989,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLabGuideMinimized(false)}",
       "handlers": {
@@ -23112,7 +23142,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3988,
+      "line": 4005,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLabGuideMinimized(true)}",
       "handlers": {
@@ -23127,7 +23157,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4000,
+      "line": 4017,
       "tag": "button",
       "signature": "button|onClick:{exitActiveLab}",
       "handlers": {
@@ -23142,7 +23172,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4061,
+      "line": 4078,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(currentStepIndex>0){setCurrentStepIndex(currentStepIndex-1);setCompletedObjectives({});}}}",
       "handlers": {
@@ -23157,7 +23187,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4073,
+      "line": 4090,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(allDone){if(currentStepIndex<totalSteps-1){setCurrentStepIndex(currentStepIndex+1);setCompletedObjectives({});}else{setLabCompleted(true);}}}}",
       "handlers": {
@@ -23172,7 +23202,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4103,
+      "line": 4120,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(true)}",
       "handlers": {
@@ -23187,7 +23217,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4113,
+      "line": 4130,
       "tag": "XbridgesDiagnosticPopup",
       "signature": "XbridgesDiagnosticPopup|onDismiss:{dismissPopup}|onShowAll:{showAllDiagnostics}",
       "handlers": {
@@ -23201,7 +23231,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4121,
+      "line": 4138,
       "tag": "XbridgesStatusBar",
       "signature": "XbridgesStatusBar|onExpandedChange:{setShowDiagnostics}|onOpenHelp:{(topicId,sectionId)=>onOpenHelp?.(topicId,sectionId)}|onSelectBlocks:{showDiagnosticBlocks}",
       "handlers": {
@@ -23216,7 +23246,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4140,
+      "line": 4157,
       "tag": "XbridgesPropertiesPanel",
       "signature": "XbridgesPropertiesPanel|onClose:{()=>setSelectedNodeId(null)}|onCollapseToggle:{setIsPropsCollapsed}|onExportDoeData:{onExportDoeData}|onInvalidParameter:{onInvalidParameter}|onLaunchDoe:{onLaunchDoe}|onUpdate:{updateBlock}",
       "handlers": {
@@ -23234,7 +23264,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4162,
+      "line": 4185,
       "tag": "XbridgesRootLocusWindow",
       "signature": "XbridgesRootLocusWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
       "handlers": {
@@ -23248,7 +23278,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4173,
+      "line": 4196,
       "tag": "XbridgesScopeWindow",
       "signature": "XbridgesScopeWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
       "handlers": {
@@ -23262,7 +23292,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4246,
+      "line": 4269,
       "tag": "button",
       "signature": "button|onClick:{exitActiveLab}",
       "handlers": {
@@ -23277,7 +23307,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4265,
+      "line": 4288,
       "tag": "button",
       "signature": "button|onClick:{()=>setShow3dxSyncModal(false)}",
       "handlers": {
@@ -23292,7 +23322,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4297,
+      "line": 4320,
       "tag": "select",
       "signature": "select|onChange:{(e)=>setSelectedTdxWorkspace(e.target.value)}",
       "handlers": {
@@ -23307,7 +23337,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4307,
+      "line": 4330,
       "tag": "button",
       "signature": "button|onClick:{handle3dxPush}",
       "handlers": {
@@ -23322,7 +23352,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4322,
+      "line": 4345,
       "tag": "div",
       "signature": "div|onClick:{()=>handle3dxPull(doc.id)}",
       "handlers": {
@@ -23337,7 +23367,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4342,
+      "line": 4365,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -23352,7 +23382,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4343,
+      "line": 4366,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -23365,7 +23395,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4358,
+      "line": 4381,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -23380,7 +23410,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4364,
+      "line": 4387,
       "tag": "button",
       "signature": "button|onClick:{()=>{setNodes([]);setEdges([]);setSelectedNodeId(null);setShowConfirmClear(false);}}",
       "handlers": {
@@ -23635,7 +23665,7 @@
     }
   ],
   "statusCounts": {
-    "documented": 1401,
+    "documented": 1403,
     "excluded": 167
   }
 }
