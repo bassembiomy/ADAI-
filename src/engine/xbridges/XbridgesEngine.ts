@@ -22,7 +22,7 @@ export class XbridgesEngine {
   public hasFatalError(): boolean {
     if (this.fatal) return true;
     // Stiff solver failures are pushed straight into `diagnostics` by StiffSolver; Simulink stops on a solver error.
-    return this.diagnostics.some(d => d.severity === 'error' && d.code.startsWith('STIFF_SOLVER_'));
+    return this.diagnostics.some(d => d.severity === 'error' && (d.code.startsWith('STIFF_SOLVER_') || d.code === 'ZERO_CROSSING_CHATTER'));
   }
 
   /** Snapshot of the fault state; a variable-step solver uses it to discard a fault raised only at a rejected trial point. */

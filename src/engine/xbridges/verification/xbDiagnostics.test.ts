@@ -83,6 +83,7 @@ const EXPECTED: Record<string, 'error' | 'warning' | 'info'> = {
   STIFF_SOLVER_NONFINITE: 'error',
   STIFF_SOLVER_SINGULAR: 'error',
   STIFF_SOLVER_STEP_TOO_SMALL: 'error',
+  ZERO_CROSSING_CHATTER: 'error', // XBV-408 (WP-21 batch S2): consecutive zero-crossing limit, Simulink-style
 };
 /** Codes whose current behaviour contradicts the expectation; each turns red when fixed (then leaves this map). */
 const PINNED_SEVERITY: Record<string, string> = {

@@ -8,6 +8,7 @@
 //     (Simulink defaults 1e-3 / 1e-6 when unset), landing exactly on t + dt (decision D3). A step that cannot meet the
 //     tolerance is retried with a smaller step; at the minimum step the run stops with a diagnostic.
 // An unknown solver name is refused with UNSUPPORTED_SOLVER (decision D3, XBV-028); nothing falls back to Euler.
+import { restoreBlockStates, snapshotBlockStates } from './stateSnapshot';
 import { XbridgesEngine } from './XbridgesEngine';
 import { Solvers } from './Solvers';
 import { AdaptiveSolver } from './AdaptiveSolver';
@@ -89,8 +90,13 @@ export function liveStep(engine: XbridgesEngine, solver: string, t: number, dt: 
     reportOnce(engine, 'STIFF_SOLVER_INVALID_OPTION', `Relative and absolute tolerance must be finite and > 0 (relTol = ${relTol}, absTol = ${absTol}).`);
     return false;
   }
+  // A faulted or failed step commits nothing (XBV-403 / XBV-404): the step-start states are restored, so the engine is
+  // at the reported time. (Deep copy: a block may mutate its state in place.)
+  const start = snapshotBlockStates(engine);
   const ok = LIVE_STEPPERS[canonical](engine, t, dt, relTol, absTol);
-  return ok && !engine.hasFatalError();
+  const good = ok && !engine.hasFatalError();
+  if (!good) restoreBlockStates(start);
+  return good;
 }
 
 /**

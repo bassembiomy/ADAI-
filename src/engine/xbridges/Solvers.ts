@@ -1,3 +1,4 @@
+import { restoreBlockStates, snapshotBlockStates } from './stateSnapshot';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -20,6 +21,13 @@ const A_DP = [
 const B5_DP = [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0];
 
 export class Solvers {
+  /** One batch step; a faulted step commits nothing, the step-start block states are restored (XBV-403 / 404). */
+  private static guardedStep(engine: XbridgesEngine, step: () => void) {
+    const start = snapshotBlockStates(engine);
+    step();
+    if (engine.hasFatalError()) restoreBlockStates(start);
+  }
+
   // ODE1: Euler Method
   static stepEuler(engine: XbridgesEngine, t: number, dt: number) {
       engine.computeOutputs(t);
@@ -33,6 +41,7 @@ export class Solvers {
            nextStates.set(blockId, nextState);
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -52,7 +61,7 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      this.stepEuler(engine, t, currentStep);
+      Solvers.guardedStep(engine, () => this.stepEuler(engine, t, currentStep));
       const y = currentStep - c;
       const temp = t + y;
       c = (temp - t) - y;
@@ -108,6 +117,7 @@ export class Solvers {
           nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -127,7 +137,7 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      this.stepODE2(engine, t, currentStep);
+      Solvers.guardedStep(engine, () => this.stepODE2(engine, t, currentStep));
       const y = currentStep - c;
       const temp = t + y;
       c = (temp - t) - y;
@@ -184,6 +194,7 @@ export class Solvers {
           nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -203,7 +214,7 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      this.stepODE3(engine, t, currentStep);
+      Solvers.guardedStep(engine, () => this.stepODE3(engine, t, currentStep));
       const y = currentStep - c;
       const temp = t + y;
       c = (temp - t) - y;
@@ -272,6 +283,7 @@ export class Solvers {
         }
       });
 
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -291,7 +303,7 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      this.stepRK4(engine, t, currentStep);
+      Solvers.guardedStep(engine, () => this.stepRK4(engine, t, currentStep));
       const y = currentStep - c;
       const temp = t + y;
       c = (temp - t) - y;
@@ -341,6 +353,7 @@ export class Solvers {
           nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -360,7 +373,7 @@ export class Solvers {
         currentStep = stopTime - t;
       }
       
-      this.stepODE5(engine, t, currentStep);
+      Solvers.guardedStep(engine, () => this.stepODE5(engine, t, currentStep));
       const y = currentStep - c;
       const temp = t + y;
       c = (temp - t) - y;

@@ -2,6 +2,7 @@
 // Variable-step explicit Runge-Kutta solvers: ode45 (Dormand-Prince) and ode23 (Bogacki-Shampine).
 // One error-controlled integration core serves the batch runs (Solvers.runFixedStep) and the live canvas step
 // (decision D3: the canvas controls the error with RelTol / AbsTol inside each output step).
+import { ConsecutiveCrossings, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -212,8 +213,12 @@ export class AdaptiveSolver {
     let zcBase: Map<string, number[]> | null = null;
     let baseStates: Map<string, any> | null = null;
     let rollbacks = 0; // consecutive trial-point fault rollbacks since the last accepted step
+    const crossings = new ConsecutiveCrossings(); // consecutive zero crossings within a tiny time window (XBV-408)
+    let passes = 0;
+    const maxPasses = cfg.batch ? MAX_INTERNAL_STEPS_BATCH : MAX_INTERNAL_STEPS_LIVE;
 
     while (t < tEnd && !engine.hasFatalError()) {
+      if (++passes > maxPasses) { reportStepBudget(engine, maxPasses, t, 'Variable-step solver'); return { ok: false, hNext: h }; }
       const target = event === null ? tEnd : (t < event.tLow ? event.tLow : event.tHigh);
       const sliver = event !== null && t >= event.tLow;
       const remaining = t === t0 && target === tEnd && cfg.span !== undefined ? cfg.span : target - t;
@@ -288,6 +293,10 @@ export class AdaptiveSolver {
         const zcCurr = engine.getZeroCrossings(t + hTry, tr.candidate);
         if (engine.hasZeroCrossingSignChange(zcBase, zcCurr)) {
           const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
+          if (crossings.note(located.tHigh, cfg.hMin, EVENT_TIME_TOL)) {
+            reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver'));
+            return { ok: false, hNext: h };
+          }
           event = located.tLow - t < cfg.hMin ? { tLow: t, tHigh: located.tHigh } : located;
           continue; // same base state and first stage, new target
         }
