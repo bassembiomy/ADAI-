@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 21 done of 29; 2 in progress; 6 to do.
-- Findings: 1 open, 212 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 0 open, 213 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 0 open
   - S3 (diagnostic, UI or convention deviation): 0 open
-  - S4 (documentation): 1 open
+  - S4 (documentation): 0 open
 - Decisions recorded: 17; open: 0.
 
 ## Work packages
@@ -63,12 +63,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 290 blocks. Per-block gate values are in the ledger; most V2-V8 cells are still 'todo' at block level because the family WPs record their evidence per finding and per test file, not per block (WP-23 final pass).
 
 ## Open findings by severity
-
-### S4 - documentation (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-318 | V7 | HIL | Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -284,6 +278,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-315 (closed): The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegativ
 - XBV-316 (closed): Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 char
 - XBV-317 (closed): The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead
+- XBV-318 (closed): Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier.
 
 ## Decisions
 
