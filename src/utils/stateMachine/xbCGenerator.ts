@@ -1,4 +1,5 @@
 import { toCIdentifier } from './smExpressions';
+import { cStateIndexSymbol, limitCIdentifiersInSource } from './smCIdentifierPolicy';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import { isContinuousFilter, isContinuousPid, isContinuousStateSpace, xbSumSigns } from './xbCapabilities';
@@ -223,12 +224,12 @@ const stateMemberEntries = (
   });
 };
 
-export const renderXBInstanceMembers = (
+const renderXBInstanceMembersRaw = (
   ir: SemanticModel,
 ): readonly string[] => stateMemberEntries(ir).map(({ state, member }) =>
   `${stateType(state)} ${member};`);
 
-export const renderXBHeader = (ir: SemanticModel): string => {
+const renderXBHeaderRaw = (ir: SemanticModel): string => {
   const states = orderedXBStates(ir);
   const wrappers = states.flatMap((state) =>
     conversionWrappers(state).map(({ name }) =>
@@ -967,7 +968,7 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   }
 
   const ownerIndexSymbol = state.xBridges?.ownerState.cIndexSymbol
-    ?? `SM_ST_${toCIdentifier(state.id).toUpperCase()}_IDX`;
+    ?? cStateIndexSymbol(`SM_ST_${toCIdentifier(state.id).toUpperCase()}`);
   const stepTimeSeconds = Number(
     scalarParameter(operation, ['step_time', 'stepTime', 'time'], 0.3),
   );
@@ -4862,7 +4863,7 @@ const renderedStatesUse = (ir: SemanticModel, type: string): boolean =>
   orderedXBStates(ir).some((state) => state.xBridges!.executionOrder.some((operationId) =>
     state.xBridges!.operations[operationId]?.type === type));
 
-export const renderXBLifecycleSource = (ir: SemanticModel): string =>
+const renderXBLifecycleSourceRaw = (ir: SemanticModel): string =>
   lines(
     orderedXBStates(ir).some((state) => state.xBridges!.executionOrder.some((operationId) =>
       state.xBridges!.operations[operationId]?.type === 'MatrixSolve'))
@@ -5119,7 +5120,7 @@ const toCompoundBodies = (source: string): string =>
       `${indent}${condition} {\n${indent}    ${statement}\n${indent}}`,
   );
 
-export const renderXBSource = (
+const renderXBSourceRaw = (
   ir: SemanticModel,
   options: { platform?: 'generic' | 'autosar' } = {},
 ): string => {
@@ -5150,3 +5151,22 @@ export const renderXBSource = (
   validateGeneratedCAST(cCode);
   return cCode;
 };
+
+// C99 5.2.4.1: only 63 initial characters of an internal identifier are significant. Every generated identifier
+// (members, locals, functions, macros) longer than that is shortened with a stable hash suffix; the mapping depends
+// on the identifier alone, so the header, the source and the instance struct agree. Short ids are unchanged.
+export const renderXBInstanceMembers = (
+  ir: SemanticModel,
+): readonly string[] =>
+  renderXBInstanceMembersRaw(ir).map(limitCIdentifiersInSource);
+
+export const renderXBHeader = (ir: SemanticModel): string =>
+  limitCIdentifiersInSource(renderXBHeaderRaw(ir));
+
+export const renderXBLifecycleSource = (ir: SemanticModel): string =>
+  limitCIdentifiersInSource(renderXBLifecycleSourceRaw(ir));
+
+export const renderXBSource = (
+  ir: SemanticModel,
+  options: { platform?: 'generic' | 'autosar' } = {},
+): string => limitCIdentifiersInSource(renderXBSourceRaw(ir, options));

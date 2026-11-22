@@ -10,6 +10,7 @@
  * Probes are 'block.port'. Numeric fault policy defaults to 'signal-only' so out-of-domain results are compared as values
  * (with 'escalate' both sides stop at the first fault).
  */
+import { limitCIdentifierLength } from '../../../utils/stateMachine/smCIdentifierPolicy';
 import { execFile } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -124,10 +125,10 @@ function probeAccessor(ir: SemanticModel, header: string, probe: string): { acce
   if (!sig) throw new Error(`probe '${probe}' is not an X-Bridges signal of the IR`);
   // A fixed-point signal is read through its real-value shadow field (what the interpreter publishes).
   const base = toCIdentifier(`${sig.nodeId}_${sig.portId}`);
-  const field = sig.numericType.kind === 'fixed' ? `${base}_real_value` : base;
+  const field = limitCIdentifierLength(sig.numericType.kind === 'fixed' ? `${base}_real_value` : base);
   if (!new RegExp(`\\b${field}(\\[\\d+\\])*;`).test(header)) throw new Error(`generated header has no field '${field}' for probe '${probe}'`);
   const dims = sig.shape.kind === 'scalar' ? [] : sig.shape.kind === 'vector' ? [sig.shape.length] : [sig.shape.rows, sig.shape.columns];
-  return { access: `instance.xb_${toCIdentifier(PARITY_STATE_ID)}.${field}`, count: dims.reduce((a, b) => a * b, 1), dims };
+  return { access: `instance.${limitCIdentifierLength(`xb_${toCIdentifier(PARITY_STATE_ID)}`.toLowerCase())}.${field}`, count: dims.reduce((a, b) => a * b, 1), dims };
 }
 
 /** Harness source: one output line per tick, values comma separated in probe order (row-major), "%.17g". */

@@ -1,3 +1,4 @@
+import { cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -99,7 +100,7 @@ const stateNode = (ir: SemanticModel, stateId: string): string =>
   ir.states[stateId].enumName;
 
 const stateIndex = (ir: SemanticModel, stateId: string): string =>
-  `${stateNode(ir, stateId)}_IDX`;
+  cStateIndexSymbol(stateNode(ir, stateId));
 
 const xbStateFunction = (
   state: SemanticState,
@@ -108,7 +109,7 @@ const xbStateFunction = (
   const suffix = toCIdentifier(
     state.enumName.replace(/^SM_ST_/, ''),
   ).toUpperCase();
-  return `SM_XB_${suffix}_${phase}`;
+  return limitCIdentifierLength(`SM_XB_${suffix}_${phase}`);
 };
 
 const stateFunction = (
@@ -124,7 +125,7 @@ const layerFunction = (
 ): string => `${prefix}_${index.layerNumber.get(layerId)!}`;
 
 const layerMacro = (layer: SemanticLayer): string =>
-  `SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`;
+  limitCIdentifierLength(`SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`);
 
 const descendantsOfLayer = (
   ir: SemanticModel,
@@ -912,7 +913,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
       `#define ${layerMacro(layer)} ${index.layerNumber.get(layer.id)!}U`),
     ...states.flatMap((state) => [
       stateTraceComment(state),
-      `#define ${stateNode(ir, state.id)}_IDX ${index.stateNumber.get(state.id)!}U`,
+      `#define ${stateIndex(ir, state.id)} ${index.stateNumber.get(state.id)!}U`,
     ]),
     '',
     'typedef enum {',

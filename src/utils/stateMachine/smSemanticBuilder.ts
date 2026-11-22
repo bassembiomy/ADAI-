@@ -1,3 +1,4 @@
+import { cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
 import type { StateData } from '../../types/sm_types';
 import {
   parseActions,
@@ -404,7 +405,7 @@ export const buildSemanticModel = (
       entrySource: state.entry,
       duringSource: state.during,
       exitSource: state.exit,
-      enumName: `SM_ST_${toCIdentifier(state.id).toUpperCase()}`,
+      enumName: limitCIdentifierLength(`SM_ST_${toCIdentifier(state.id).toUpperCase()}`),
       parentStateId,
       layerId: containingLayer.id,
       depth: ancestorsFromSelf(state.id, hierarchy.parentByStateId).length - 1,
@@ -723,7 +724,7 @@ export const buildSemanticModel = (
     stateSymbols.set(sId, {
       stateId: sourceState.id,
       stateName: sourceState.name,
-      cIndexSymbol: `SM_ST_${toCIdentifier(sourceState.id).toUpperCase()}_IDX`,
+      cIndexSymbol: cStateIndexSymbol(`SM_ST_${toCIdentifier(sourceState.id).toUpperCase()}`),
       numericIndex: idx,
     });
   }

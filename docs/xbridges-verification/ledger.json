@@ -2505,8 +2505,9 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S4",
    "gate": "U16",
-   "status": "open",
-   "summary": "Generated C member names are not unique in the first 63 characters (C99 5.2.4.1) for ids that differ only later; smCIdentifierPolicy is not applied to members (xbCGenerator.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "Generated C member names are not unique in the first 63 characters (C99 5.2.4.1) for ids that differ only later; smCIdentifierPolicy is not applied to members (xbCGenerator.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U3 (4 reworks): generated C identifiers derived from model ids are shortened at their name builders (limitCIdentifierLength: 54-char prefix + '_' + 8 hex SHA-256; cStateIndexSymbol for every state index); xbCGenerator's text mapping skips comments, string/char literals and variable members; harnesses use the product's builders. Short ids give 738 byte-identical files across 6 option sets; long block, state and variable ids compile (gcc, clang -Werror) and give simulator = C = standalone traces."
   },
   {
    "id": "XBV-309",
