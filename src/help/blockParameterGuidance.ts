@@ -168,7 +168,7 @@ const meanings: Record<string, string> = {
   d: 'Fourth breakpoint of a trapezoidal membership function.', sigma: 'Gaussian membership-function spread.',
   operator: 'Fuzzy antecedent combination operator.', implication: 'Rule implication method for applying firing strength to the consequent.',
   numAntecedents: 'Number of antecedent input ports constructed for the rule.',
-  andMethod: 'Fuzzy AND combination method.', orMethod: 'Fuzzy OR (s-norm), max or probor (a+b-ab): combines the antecedents of rules whose operator is OR and aggregates the implied output sets of a Mamdani system.',
+  andMethod: 'Fuzzy AND combination method.', orMethod: 'Fuzzy OR (s-norm): max or probor (a + b - ab), applied to the antecedents of rules whose operator is OR. Rule aggregation is always max.',
   defuzzMethod: 'Method used to convert aggregate membership into a scalar result.',
   defuzzResolution: 'Number of sampled points used in output-universe aggregation/defuzzification.',
   inputMFs: 'Membership-function definitions for each input universe.', outputMFs: 'Membership-function definitions for the output universe.',
