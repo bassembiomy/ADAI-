@@ -79,6 +79,17 @@ export class XbridgesEngine {
   private cycleBlocks: XBlock[] = [];
   private downstreamBlocks: XBlock[] = [];
   private nextSampleTime = new Map<string, number>();
+
+  /** Restores a discrete block's sample-hit grid from an engine snapshot (hit index and next scheduled tick). */
+  restoreSampleGrid(blockId: string, grid: { hitIndex?: unknown; nextTick?: unknown }): void {
+    const block = this.getBlock(blockId);
+    if (!block || this.sampleTimeOf(block) <= 0) return;
+    if (typeof grid.hitIndex !== 'number' || !Number.isFinite(grid.hitIndex)) return;
+    if (typeof grid.nextTick !== 'number' || !Number.isFinite(grid.nextTick)) return;
+    block.hitIndex = grid.hitIndex;
+    block.nextTick = grid.nextTick;
+    this.nextSampleTime.set(blockId, grid.nextTick);
+  }
   private lastOutputs = new Map<string, any[]>();
 
   constructor(model: XModel) {
