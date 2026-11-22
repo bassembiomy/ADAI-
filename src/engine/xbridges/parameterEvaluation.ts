@@ -359,12 +359,12 @@ function evaluate(raw: unknown, kind: ParameterKind): { value: number | number[]
     }
     case 'positive': {
       const x = needScalar();
-      if (!(x > 0)) throw new ParamError('PARAMETER_OUT_OF_RANGE', `Value ${x} must be greater than 0.`);
+      if (!Number.isFinite(x) || !(x > 0)) throw new ParamError('PARAMETER_OUT_OF_RANGE', `Value ${x} must be a finite number greater than 0.`);
       return { value: x };
     }
     case 'nonnegative': {
       const x = needScalar();
-      if (!(x >= 0)) throw new ParamError('PARAMETER_OUT_OF_RANGE', `Value ${x} must be 0 or greater.`);
+      if (!Number.isFinite(x) || !(x >= 0)) throw new ParamError('PARAMETER_OUT_OF_RANGE', `Value ${x} must be a finite number, 0 or greater.`);
       return { value: x };
     }
     case 'range': {
