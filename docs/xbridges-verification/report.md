@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 21 done of 29; 2 in progress; 6 to do.
-- Findings: 11 open, 197 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 13 open, 197 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 4 open
-  - S3 (diagnostic, UI or convention deviation): 3 open
+  - S3 (diagnostic, UI or convention deviation): 5 open
   - S4 (documentation): 4 open
 - Decisions recorded: 16; open: 0.
 
@@ -73,13 +73,15 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-306 | U8 | 4.1 universal battery | MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create\|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-309 | U8 | 4.1 universal battery | FUZZY_INFERENCE_SYSTEM.orMethod (max\|probor) is stored but never read: both give 0.083979 while andMethod changes the output (BlockDefinitions.ts ~10551). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 
-### S3 - diagnostic, UI or convention deviation (3)
+### S3 - diagnostic, UI or convention deviation (5)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-302 | U6 | 4.1 universal battery | Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-310 | U8 | 4.1 universal battery | 16 panel enums outside parameterSchema accept unknown and wrong-case values silently (CLARKE_TRANSFORM.mode runs an unknown value as power-invariant; PWM_GENERATOR.carrierType; THREE_PHASE_PWM.method; CFD_DEM_SURROGATE_LEARNER.mode; Diag*.diagMode; FUZZY_INFERENCE_SYSTEM type/andMethod/orMethod/defuzzMethod; FUZZY_RULE operator/implication; FUZZY_AND/OR method; FUZZY_DEFUZZIFY.method, where 'zz_unknown' and 'MOM' silently give the centroid); Simulink refuses an invalid dialog value (PARAMETER_OPTION_INVALID). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-312 | U13 | 4.1 universal battery | Scope sampleTime decimation compares time - lastSampleTime with an absolute 1e-9 (BlockDefinitions.ts ~3107): at start 1e8 s, h 0.01, Ts 0.1 it logs 12000 of 20000 samples (0.2 s gaps); clean at 0, 1e6, 1e7 s. Needs the integer-index grid of XBV-307. Found by the WP-21 E6 verifier. |
+| XBV-314 | V4 | 4.1 universal battery | A Scope with sampleTime 0.1 over [0, 2] logs 20 samples; Simulink logs 21 (both endpoints, t = 2 included). Same on the base. Found by the WP-21 E7 verifier. |
+| XBV-315 | V3 | 4.3 parameters | The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegative') must reject non-finite values with a PARAMETER_* diagnostic. Found by the WP-21 E7 verifier. |
 
 ### S4 - documentation (4)
 

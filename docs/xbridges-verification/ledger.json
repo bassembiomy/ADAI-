@@ -2536,6 +2536,22 @@
    "gate": "U13",
    "status": "open",
    "summary": "PWM carrier phase += dt*f (BlockDefinitions.ts ~447) accumulates a bounded error (5e-12 after 1e6 steps from 0, 3.6e-8 at 1e8 s); a duty exactly equal to the carrier value (e.g. 0.3) can flip the gate on a tie. Derive the phase from t (frac(f t + phase0)). Found by the WP-21 E6 verifier."
+  },
+  {
+   "id": "XBV-314",
+   "plan_ref": "4.1 universal battery",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "A Scope with sampleTime 0.1 over [0, 2] logs 20 samples; Simulink logs 21 (both endpoints, t = 2 included). Same on the base. Found by the WP-21 E7 verifier."
+  },
+  {
+   "id": "XBV-315",
+   "plan_ref": "4.3 parameters",
+   "severity": "S3",
+   "gate": "V3",
+   "status": "open",
+   "summary": "The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegative') must reject non-finite values with a PARAMETER_* diagnostic. Found by the WP-21 E7 verifier."
   }
  ],
  "blocks": {
