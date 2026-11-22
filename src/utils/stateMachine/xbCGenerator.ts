@@ -1,5 +1,5 @@
 import { toCIdentifier } from './smExpressions';
-import { cStateIndexSymbol, limitCIdentifiersInSource } from './smCIdentifierPolicy';
+import { cDataMemberName, cStateIndexSymbol, limitCIdentifiersInSource } from './smCIdentifierPolicy';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import { isContinuousFilter, isContinuousPid, isContinuousStateSpace, xbSumSigns } from './xbCapabilities';
@@ -4789,7 +4789,7 @@ const renderStateLifecycle = (
   let inputMappingIndex = 0;
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'in') continue;
-    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
+    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? cDataMemberName(mapping.variableId);
     stepLines.push(...renderSignalWrite(
       state,
       {
@@ -4827,7 +4827,7 @@ const renderStateLifecycle = (
   stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
-    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
+    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? cDataMemberName(mapping.variableId);
     const op = xb.operations[mapping.blockId];
     const targetSignalId = (op?.type === 'Outport' && op.outputSignalIds[0])
       ? op.outputSignalIds[0]

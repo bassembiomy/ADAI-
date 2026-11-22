@@ -1,4 +1,5 @@
 import { HILConfig } from './hilTypes';
+import { cDataMemberName } from '../../utils/stateMachine/smCIdentifierPolicy';
 import { hilDriverTemplates } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
@@ -337,7 +338,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         if (t === 'single') return 'float';
         return t;
       };
-      return `    if (override_active_${sanitize(ch.name)}) {\n        instance->data.${smVar.name} = (${targetType(smVar.type || 'float')})(override_val_${sanitize(ch.name)});\n    } else {\n        instance->data.${smVar.name} = ${expr};\n    }`;
+      return `    if (override_active_${sanitize(ch.name)}) {\n        instance->data.${cDataMemberName(smVar.name)} = (${targetType(smVar.type || 'float')})(override_val_${sanitize(ch.name)});\n    } else {\n        instance->data.${cDataMemberName(smVar.name)} = ${expr};\n    }`;
     })
     .filter(Boolean)
     .join('\n');
@@ -348,7 +349,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
     if (!channel || !variable) return '';
     const types: Record<string, string> = {uint8:'uint8_t',int8:'int8_t',uint16:'uint16_t',int16:'int16_t',uint32:'uint32_t',uint:'uint32_t',int32:'int32_t',int:'int32_t',single:'float'};
     const type = types[variable.type] ?? variable.type ?? 'float';
-    return `    if (override_active_${sanitize(channel.name)}) {\n        instance->data.${variable.name} = (${type})(override_val_${sanitize(channel.name)});\n    }`;
+    return `    if (override_active_${sanitize(channel.name)}) {\n        instance->data.${cDataMemberName(variable.name)} = (${type})(override_val_${sanitize(channel.name)});\n    }`;
   }).filter(Boolean).join('\n');
 
   // Output synchronization logic
@@ -359,7 +360,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
       const smVar = smVariables.find(v => v.name === m.adiaVarId);
       if (!ch || !smVar) return '';
 
-      let valExpr = `instance->data.${smVar.name}`;
+      let valExpr = `instance->data.${cDataMemberName(smVar.name)}`;
       if (ch.scalingFactor && ch.scalingFactor !== 1) {
         valExpr = `((float)(${valExpr}) * ${ch.scalingFactor}f)`;
       }
@@ -420,7 +421,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
       const mapping = config.mappings.find(m => m.channelId === ch.id);
       let valExpr = '0.0f';
       if (mapping) {
-        valExpr = `instance->data.${mapping.adiaVarId}`;
+        valExpr = `instance->data.${cDataMemberName(mapping.adiaVarId)}`;
       } else {
         const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
         if (ch.peripheral === 'GPIO') {
@@ -536,7 +537,7 @@ ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t
 `;
 
   // 6. main_hil.c
-  const mainHilC = `${disclaimer}#ifdef __cplusplus
+  const mainHilC = `${disclaimer}${target === 'Generic' ? '#ifndef _WIN32\n#ifndef _DEFAULT_SOURCE\n#define _DEFAULT_SOURCE 1 /* usleep under -std=c99 */\n#endif\n#endif\n' : ''}#ifdef __cplusplus
 extern "C" {
 #endif
 #include "sm_core.h"

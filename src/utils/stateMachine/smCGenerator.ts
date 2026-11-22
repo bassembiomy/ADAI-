@@ -1,4 +1,4 @@
-import { cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
+import { cDataMemberName, cMcalChannelMacro, cStateActionSymbol, cStateIndexSymbol, limitCIdentifierLength } from './smCIdentifierPolicy';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -231,7 +231,7 @@ const renderMarkEntered = (
     state.xBridges?.policy.memory === 'reset'
       ? `${indent}${xbStateFunction(state, 'Enter')}(instance);`
       : null,
-    `${indent}${stateNode(ir, stateId)}_Entry(instance);`,
+    `${indent}${cStateActionSymbol(stateNode(ir, stateId), 'Entry')}(instance);`,
   ).trimEnd();
 };
 
@@ -496,7 +496,7 @@ const renderExitFunctions = (
     `            if (!instance->state_active[${stateIndex(ir, state.id)}]) { break; }`,
     ...[...state.childLayerIds].reverse().map((layerId) =>
       `            SM_Exit_Layer(instance, ${layerMacro(ir.layers[layerId])});`),
-    `            ${stateNode(ir, state.id)}_Exit(instance);`,
+    `            ${cStateActionSymbol(stateNode(ir, state.id), 'Exit')}(instance);`,
     `            instance->state_active[${stateIndex(ir, state.id)}] = false;`,
     `            instance->state_timers[${stateIndex(ir, state.id)}] = 0U;`,
     state.activeSlot >= 0
@@ -770,7 +770,7 @@ const renderExecuteFunctions = (
       '{',
       state.childLayerIds.length > 0 ? '    bool transitioned = false;' : null,
       renderTransitionPhase(ir, index, state.id, 'outer') || null,
-      `    ${stateNode(ir, state.id)}_During(instance);`,
+      `    ${cStateActionSymbol(stateNode(ir, state.id), 'During')}(instance);`,
       state.xBridges === null
         ? null
         : lines(
@@ -1028,9 +1028,9 @@ export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
   '',
   ...orderedStates(ir).flatMap((state) => [
     stateTraceComment(state),
-    `void ${stateNode(ir, state.id)}_Entry(ADIA_Instance_t *instance);`,
-    `void ${stateNode(ir, state.id)}_During(ADIA_Instance_t *instance);`,
-    `void ${stateNode(ir, state.id)}_Exit(ADIA_Instance_t *instance);`,
+    `void ${cStateActionSymbol(stateNode(ir, state.id), 'Entry')}(ADIA_Instance_t *instance);`,
+    `void ${cStateActionSymbol(stateNode(ir, state.id), 'During')}(ADIA_Instance_t *instance);`,
+    `void ${cStateActionSymbol(stateNode(ir, state.id), 'Exit')}(ADIA_Instance_t *instance);`,
   ]),
   '',
   '#endif /* SM_USER_LOGIC_H */',
@@ -1043,7 +1043,7 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
   ...orderedStates(ir).flatMap((state) => [
     stateTraceComment(state),
     lines(
-      `void ${stateNode(ir, state.id)}_Entry(ADIA_Instance_t *instance)`,
+      `void ${cStateActionSymbol(stateNode(ir, state.id), 'Entry')}(ADIA_Instance_t *instance)`,
       '{',
       state.entryActions.length === 0
         ? '    (void)instance;'
@@ -1055,7 +1055,7 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
       '}',
     ),
     lines(
-      `void ${stateNode(ir, state.id)}_During(ADIA_Instance_t *instance)`,
+      `void ${cStateActionSymbol(stateNode(ir, state.id), 'During')}(ADIA_Instance_t *instance)`,
       '{',
       state.duringActions.length === 0
         ? '    (void)instance;'
@@ -1067,7 +1067,7 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
       '}',
     ),
     lines(
-      `void ${stateNode(ir, state.id)}_Exit(ADIA_Instance_t *instance)`,
+      `void ${cStateActionSymbol(stateNode(ir, state.id), 'Exit')}(ADIA_Instance_t *instance)`,
       '{',
       state.exitActions.length === 0
         ? '    (void)instance;'
@@ -1366,7 +1366,7 @@ export const renderSafetySource = (
 };
 
 const channelMacro = (channelId: string): string =>
-  `MCAL_CH_${toCIdentifier(channelId).toUpperCase()}`;
+  cMcalChannelMacro(channelId);
 
 export const renderMcalHeader = (
   ir: SemanticModel,

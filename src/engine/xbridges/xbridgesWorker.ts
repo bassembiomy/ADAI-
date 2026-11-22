@@ -19,9 +19,18 @@ function serializeEngineSnapshot(engine: XbridgesEngine, time: number): Xbridges
     }
   }
 
+  // Discrete blocks keep their sample-hit grid so a resumed run continues on it (no repeated hit).
+  const sampleGrid: Record<string, { hitIndex: number; nextTick: number }> = {};
+  for (const block of engine.executionOrder) {
+    if (block.hitIndex !== undefined && block.nextTick !== undefined) {
+      sampleGrid[block.id] = { hitIndex: block.hitIndex, nextTick: block.nextTick };
+    }
+  }
+
   return {
     time,
     blockStates,
+    sampleGrid,
   };
 }
 
@@ -108,6 +117,10 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
         if (block) {
           block.state = state;
         }
+      }
+      // An older snapshot has no sample grid: the engine keeps the grid compile() derived from the start time.
+      for (const [id, grid] of Object.entries(request.engineSnapshot.sampleGrid ?? {})) {
+        workerEngine.restoreSampleGrid(id, grid);
       }
     }
 

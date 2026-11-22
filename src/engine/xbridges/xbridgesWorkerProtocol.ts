@@ -4,6 +4,8 @@ export interface XbridgesEngineSnapshot {
   time: number;
   blockStates: Record<string, any>;
   signalValues?: Record<string, any>;
+  /** Discrete blocks' sample-hit grid (absent in older snapshots). */
+  sampleGrid?: Record<string, { hitIndex: number; nextTick: number }>;
 }
 
 export type XbridgesWorkerTaskType = 'step' | 'batch' | 'compile' | 'cancel' | 'reset';

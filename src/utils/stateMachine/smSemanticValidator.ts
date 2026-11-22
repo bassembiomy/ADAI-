@@ -1,3 +1,4 @@
+import { cDataMemberName } from './smCIdentifierPolicy';
 import type {
   JunctionData,
   StateData,
@@ -64,7 +65,7 @@ const validateXBridges = (
       {
         id: variable.id,
         name: variable.name,
-        cName: toCIdentifier(variable.name),
+        cName: cDataMemberName(variable.name),
         type: variable.type,
         initialValue: variable.currentValue,
       },
@@ -207,7 +208,7 @@ const validateIdentifierNamespaces = (
     register(`SM_ST_${toCIdentifier(state.id).toUpperCase()}`, state.id);
   }
   for (const variable of model.variables) {
-    const cName = toCIdentifier(variable.name);
+    const cName = cDataMemberName(variable.name);
     register(`DATA_${cName}`, variable.id);
     const runtimeReserved = new Set([
       'active_states',
@@ -227,7 +228,7 @@ const validateIdentifierNamespaces = (
         variable.id,
       ));
     }
-    if (cName !== variable.name) {
+    if (toCIdentifier(variable.name) !== variable.name) {
       diagnostics.push(diagnostic(
         'C_IDENTIFIER_INVALID',
         `Variable '${variable.id}' has invalid C identifier '${variable.name}'.`,

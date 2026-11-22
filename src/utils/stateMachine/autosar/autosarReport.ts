@@ -6,6 +6,7 @@
 import type { ErrorItem } from '../../../types/sm_types';
 import type { LegacyStateMachineModel } from '../smModel';
 import { checkArxmlStructure } from './autosarArxmlCheck';
+import { cStateActionSymbol } from '../smCIdentifierPolicy';
 import {
   AUTOSAR_GATE_IDS,
   type AutosarGateEvidence,
@@ -417,7 +418,7 @@ const buildBlocks = (
         state.id,
         state.name,
         traceOf(state.id)?.traceId ?? '-',
-        `${state.enumName}_Entry, ${state.enumName}_During, ${state.enumName}_Exit`,
+        `${cStateActionSymbol(state.enumName, 'Entry')}, ${cStateActionSymbol(state.enumName, 'During')}, ${cStateActionSymbol(state.enumName, 'Exit')}`,
         requirements(state.id),
       ]),
     },
