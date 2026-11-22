@@ -146,3 +146,38 @@ describe('XBV-316: state-machine C names unique within 63 characters', () => {
     expect(() => execFileSync('gcc', ['-std=c99', '-Wall', '-Werror', '-c', '-I', dir, ...cs], { stdio: 'pipe', cwd: dir })).not.toThrow();
   }, 120_000);
 });
+
+// XBV-316 (U4 rework): the HIL interface code uses the same SM_Data_t member names as the core (cDataMemberName), so a HIL
+// package with variables longer than 63 characters compiles (Generic target, gcc -std=c99 -Wall -Werror), and the Arduino
+// and STM32F4 hil_interface.c reference only declared members.
+import { generateMISRACCode } from '../stateMachineCodeGenerator';
+describe('XBV-316: HIL interface with long variable ids', () => {
+  const A = 'v_adc_' + 'a'.repeat(70), P = 'v_pwm_' + 'p'.repeat(70);
+  const gen = (target: string) => generateMISRACCode({
+    tickMs: 10,
+    states: [{ id: 'idle', name: 'Idle', x: 0, y: 0, width: 100, height: 60, entry: '', during: `${P} = ${A};`, exit: '', isActive: false, color: '#000', parentId: null, children: [], priority: 1, isParallel: false, regionId: null, autostart: true }],
+    junctions: [], transitions: [],
+    variables: [A, P].map((n, i) => ({ id: 'v' + i, name: n, type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true })),
+    layers: [{ id: 'root', name: 'root', parentStateId: null, decomposition: 'OR', stateIds: ['idle'], transitionIds: [], junctionIds: [] }],
+    safetyMode: false,
+    hilConfig: { enabled: true, target, clockSpeed: 1, commPort: '', baudRate: 115200,
+      channels: [{ id: 'adc', name: 'adc', peripheral: 'ADC', pin: 'A0', direction: 'In', dataType: 'uint16', rangeMin: 0, rangeMax: 1023, scalingFactor: 1, unit: '' },
+        { id: 'pwm', name: 'pwm', peripheral: 'PWM', pin: 'P0', direction: 'Out', dataType: 'uint16', rangeMin: 0, rangeMax: 255, scalingFactor: 1, unit: '' }],
+      mappings: [{ id: 'adc_read', adiaVarId: A, channelId: 'adc', direction: 'read' }, { id: 'pwm_write', adiaVarId: P, channelId: 'pwm', direction: 'write', safeValue: 128 }] },
+  } as never, { includeTestShims: true } as never) as unknown as { files: Array<{ name: string; content: string }>; errors: unknown[] };
+  it('Generic: every .c compiles with gcc -std=c99 -Wall -Werror', () => {
+    const r = gen('Generic');
+    const dir = mkdtempSync(join(tmpdir(), 'xbv316hil-'));
+    for (const f of r.files) if (!f.name.includes('/')) writeFileSync(join(dir, f.name), f.content);
+    const cs = r.files.filter((f) => f.name.endsWith('.c') && !f.name.includes('/')).map((f) => f.name);
+    expect(() => execFileSync('gcc', ['-std=c99', '-Wall', '-Werror', '-c', '-I.', ...cs], { cwd: dir, stdio: 'pipe' })).not.toThrow();
+  }, 120_000);
+  for (const target of ['Arduino_Uno', 'STM32F4']) {
+    it(`${target}: every data.<member> in the HIL interface is declared in SM_Data_t`, () => {
+      const r = gen(target);
+      const core = r.files.filter((f) => /\.h$/.test(f.name)).map((f) => f.content).join('\n');
+      const used = new Set(r.files.flatMap((f) => f.content.match(/data\.([A-Za-z_]\w*)/g) ?? []).map((s) => s.slice(5)));
+      for (const m of used) expect(core, m).toMatch(new RegExp(`\\b${m}\\b`));
+    });
+  }
+});
