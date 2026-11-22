@@ -2577,16 +2577,26 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S4",
    "gate": "U16",
-   "status": "open",
-   "summary": "Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 characters; SM_Data_t variable members whose ids share 63 characters (count / counter); MCAL_CH_<channel> macros. Found by the WP-21 U3 verifier; out of scope of XBV-308 (X-Bridges member names)."
+   "status": "closed",
+   "summary": "Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 characters; SM_Data_t variable members whose ids share 63 characters (count / counter); MCAL_CH_<channel> macros. Found by the WP-21 U3 verifier; out of scope of XBV-308 (X-Bridges member names).",
+   "fix": "WP-21 batch U4: one builder per name family in smCIdentifierPolicy (cDataMemberName for SM_Data_t members, cStateActionSymbol = limit(enum + '_' + phase), cMcalChannelMacro), used by the C generator, semantic builder and validator, host test suite, xbCGenerator, AUTOSAR report and the HIL generator; no two names share 63 characters; long-variable HIL packages compile (Generic gcc -std=c99 -Wall -Werror); validator diagnostics unchanged; short-id output byte-identical except two pre-existing fixes (xb6StepFixture host suite now compiles; Generic main_hil.c declares usleep via _DEFAULT_SOURCE)."
   },
   {
    "id": "XBV-317",
    "plan_ref": "4.4 worker",
    "severity": "S3",
    "gate": "V4",
+   "status": "closed",
+   "summary": "The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead of 9; DELAY buffer differs). Pre-existing; the app never sends a snapshot back to the worker today, but the protocol supports it. Found by the WP-21 E8 verifier.",
+   "fix": "WP-21 batch U4: the worker engine snapshot carries each discrete block's sampleGrid (hitIndex, nextTick) and restores it on compile with a snapshot; resumed runs equal uninterrupted runs (<= 4.4e-16) for UNIT_DELAY, DELAY, RATE_LIMITER and Scope at hit and non-hit resume times; old snapshots fall back."
+  },
+  {
+   "id": "XBV-318",
+   "plan_ref": "HIL",
+   "severity": "S4",
+   "gate": "V7",
    "status": "open",
-   "summary": "The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead of 9; DELAY buffer differs). Pre-existing; the app never sends a snapshot back to the worker today, but the protocol supports it. Found by the WP-21 E8 verifier."
+   "summary": "Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier."
   }
  ],
  "blocks": {

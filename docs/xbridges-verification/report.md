@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 21 done of 29; 2 in progress; 6 to do.
-- Findings: 2 open, 210 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 1 open, 212 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 1 open
+  - S3 (diagnostic, UI or convention deviation): 0 open
   - S4 (documentation): 1 open
 - Decisions recorded: 17; open: 0.
 
@@ -64,17 +64,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S3 - diagnostic, UI or convention deviation (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-317 | V4 | 4.4 worker | The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead of 9; DELAY buffer differs). Pre-existing; the app never sends a snapshot back to the worker today, but the protocol supports it. Found by the WP-21 E8 verifier. |
-
 ### S4 - documentation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-316 | U16 | 4.1 universal battery | Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 characters; SM_Data_t variable members whose ids share 63 characters (count / counter); MCAL_CH_<channel> macros. Found by the WP-21 U3 verifier; out of scope of XBV-308 (X-Bridges member names). |
+| XBV-318 | V7 | HIL | Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -288,6 +282,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-313 (closed): PWM carrier phase += dt*f (BlockDefinitions.ts ~447) accumulates a bounded error (5e-12 after 1e6 steps from 0, 3.6e-8 at 1e8 s); a duty exactly equal to the carrier value (e.g. 0.3) can flip the gate
 - XBV-314 (closed): A Scope with sampleTime 0.1 over [0, 2] logs 20 samples; Simulink logs 21 (both endpoints, t = 2 included). Same on the base. Found by the WP-21 E7 verifier.
 - XBV-315 (closed): The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegativ
+- XBV-316 (closed): Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 char
+- XBV-317 (closed): The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead
 
 ## Decisions
 
