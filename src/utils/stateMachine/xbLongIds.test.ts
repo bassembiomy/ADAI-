@@ -92,3 +92,19 @@ describe('XBV-308: short ids generate no shortened identifier', () => {
     expect(bad).toEqual([]);
   }, 240_000);
 });
+
+// U3 rework 4 (verifier): the harnesses must use the product's own name builders. State-machine variables with ids longer
+// than 63 characters keep simulator = C (the product keeps variable members as they are; the harness must not rename them).
+describe('XBV-308: long variable ids keep simulator = C traces', () => {
+  it('variables of 70+ characters mapped to an X-Bridges model: no difference between the simulator and the compiled C trace', () => {
+    const U = 'Pin_' + 'p'.repeat(66) + '_x', Y = 'Pout_' + 'p'.repeat(66) + '_x';
+    const a = asXbOwner(smState('A', { autostart: true }), {
+      nodes: [xbNode('g', 'GAIN', { gain: 2 }, ['u'], ['y']), xbNode('d', 'UNIT_DELAY', { initialCondition: 5 }, ['u'], ['y'])],
+      edges: [xbEdge('g.y', 'd.u')],
+      mappings: [xbMap(U, 'g.u', 'in'), xbMap(Y, 'd.y', 'out')],
+    });
+    const m = buildSmModel({ tickMs: 100, states: [a], variables: [smVar(U), smVar(Y)], layers: [{ id: 'root', parent: null, states: ['A'] }] });
+    const t = runThree(fixtureOf(m, [1, 2, 3, 4].map((u) => ({ kind: 'step' as const, inputs: { [U]: u } }))));
+    expect(diffTraces(t.sim, t.c)).toEqual([]);
+  }, 120_000);
+});
