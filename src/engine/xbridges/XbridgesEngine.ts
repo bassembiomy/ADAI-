@@ -92,6 +92,17 @@ export class XbridgesEngine {
   }
   private lastOutputs = new Map<string, any[]>();
 
+  /** Restores the held (ZOH) output of a discrete block from an engine snapshot, so a resume between sample hits publishes it. */
+  restoreHeldOutput(blockId: string, portId: string, value: unknown): void {
+    const block = this.getBlock(blockId);
+    if (!block || this.sampleTimeOf(block) <= 0) return;
+    const index = block.outputs.findIndex(o => o.id === portId);
+    if (index < 0) return;
+    const cached = this.lastOutputs.get(blockId);
+    if (cached) cached[index] = value;
+    this.signalValues.set(`${blockId}.${portId}`, value);
+  }
+
   constructor(model: XModel) {
     this.model = model;
 
@@ -141,12 +152,19 @@ export class XbridgesEngine {
 
     this.model.blocks.forEach(b => {
       if (!b.execute) {
-        const typeKey = Object.keys(BLOCK_LIBRARY).find(k => k.toLowerCase() === b.type.toLowerCase());
+        // Exact-case key first (BLOCK_LIBRARY has e.g. 'Integrator' and 'INTEGRATOR'); case-insensitive only without an exact match.
+        const typeKey = Object.prototype.hasOwnProperty.call(BLOCK_LIBRARY, b.type)
+          ? b.type
+          : Object.keys(BLOCK_LIBRARY).find(k => k.toLowerCase() === b.type.toLowerCase());
         if (typeKey) {
           const fresh = BLOCK_LIBRARY[typeKey](b.id, b.params || {});
+          // Restore every function member the factory defines (execute, evaluateDerivatives, updateDiscrete, ZeroCrossingFn, ...):
+          // functions are not sent to the worker (XBV-047).
+          for (const key of Object.keys(fresh)) {
+            const member = (fresh as any)[key];
+            if (typeof member === 'function' && typeof (b as any)[key] !== 'function') (b as any)[key] = member;
+          }
           b.execute = fresh.execute;
-          b.evaluateDerivatives = fresh.evaluateDerivatives;
-          b.ZeroCrossingFn = fresh.ZeroCrossingFn;
           if (!b.inputs || b.inputs.length === 0) b.inputs = fresh.inputs;
           if (!b.outputs || b.outputs.length === 0) b.outputs = fresh.outputs;
           if (b.state === undefined) b.state = fresh.state;
