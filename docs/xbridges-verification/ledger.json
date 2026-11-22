@@ -2686,10 +2686,10 @@
   {
    "id": "XBV-411",
    "plan_ref": "4.5 solvers",
-   "severity": "S3",
+   "severity": "S1",
    "gate": "V5",
    "status": "open",
-   "summary": "Variable-step PWM accuracy is wider than XBV-409/410: batch ode45 at 1 kHz with minStep 1e-4 gives x = 1.94 instead of 1.0 for duty 1 s; at 500 Hz 0.054. Same without S2. Found by the WP-21 S2 verifier."
+   "summary": "Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.006; at 500 Hz and 1 kHz (minStep 1e-4) values from 0.002 to 1.0. Same without S2. Generalises XBV-409/410."
   },
   {
    "id": "XBV-412",
@@ -2705,7 +2705,7 @@
    "severity": "S4",
    "gate": "V4",
    "status": "open",
-   "summary": "ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier."
+   "summary": "ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. Controller contract test: ROBOT_VACUUM_BATTERY, ROBOT_VACUUM_MAPPING, ROBOT_VACUUM_OBSTACLE_AVOIDANCE and ROBOT_VACUUM_SLAM execute write to a frozen state."
   }
  ],
  "blocks": {

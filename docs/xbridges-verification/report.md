@@ -6,9 +6,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 - Work packages: 22 done of 29; 2 in progress; 5 to do.
 - Findings: 5 open, 220 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 0 open
+  - S1 (wrong number in simulation or generated C): 1 open
   - S2 (crash, stop, freeze or silent no-op): 2 open
-  - S3 (diagnostic, UI or convention deviation): 1 open
+  - S3 (diagnostic, UI or convention deviation): 0 open
   - S4 (documentation): 2 open
 - Decisions recorded: 17; open: 0.
 
@@ -64,6 +64,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
+### S1 - wrong number in simulation or generated C (1)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-411 | V5 | 4.5 solvers | Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.006; at 500 Hz and 1 kHz (minStep 1e-4) values from 0.002 to 1.0. Same without S2. Generalises XBV-409/410. |
+
 ### S2 - crash, stop, freeze or silent no-op (2)
 
 | Id | Gate | Plan ref | Summary |
@@ -71,18 +77,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-409 | V5 | 4.5 solvers | Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base. |
 | XBV-410 | V5 | 4.5 solvers | ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base. |
 
-### S3 - diagnostic, UI or convention deviation (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-411 | V5 | 4.5 solvers | Variable-step PWM accuracy is wider than XBV-409/410: batch ode45 at 1 kHz with minStep 1e-4 gives x = 1.94 instead of 1.0 for duty 1 s; at 500 Hz 0.054. Same without S2. Found by the WP-21 S2 verifier. |
-
 ### S4 - documentation (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-412 | V5 | 4.5 solvers | The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window from the event-location tolerance and machine precision only. Found by the WP-21 S2 verifier. |
-| XBV-413 | V4 | 4.5 solvers | ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. |
+| XBV-413 | V4 | 4.5 solvers | ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. Controller contract test: ROBOT_VACUUM_BATTERY, ROBOT_VACUUM_MAPPING, ROBOT_VACUUM_OBSTACLE_AVOIDANCE and ROBOT_VACUUM_SLAM execute write to a frozen state. |
 
 ## Closed, merged or superseded findings
 
