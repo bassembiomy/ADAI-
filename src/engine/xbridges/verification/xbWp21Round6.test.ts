@@ -237,3 +237,33 @@ describe('XBV-313: PWM gates at start 1e8 s with small steps', () => {
     }, 60_000);
   }
 });
+
+// XBV-314: a Scope with sampleTime Ts logs both endpoints of [start, stop], like Simulink (21 samples for Ts 0.1 on [0, 2],
+// the last at t = 2).
+describe('XBV-314: Scope logs the sample at the stop time', () => {
+  it('Ts 0.1 on [0, 2] (rk4, step 0.01): 21 samples, first at 0, last at 2', () => {
+    const e = new XbridgesEngine(buildModel({
+      blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 's', type: 'Scope', params: { sampleTime: 0.1, limitDataPoints: false } }],
+      wires: ['c.out -> s.in1'],
+    }));
+    Solvers.runFixedStep(e, { solver: 'rk4', startTime: 0, stopTime: 2, fixedStep: 0.01 } as never);
+    const hist = (e as unknown as { blockMap: Map<string, { state: { history: Array<{ t: number }> } }> }).blockMap.get('s')!.state.history;
+    expect(hist.length).toBe(21);
+    expect(hist[0].t).toBeCloseTo(0, 12);
+    expect(hist[20].t).toBeCloseTo(2, 9);
+  });
+});
+
+// XBV-315: 'positive' and 'nonnegative' parameters refuse non-finite values at compile (PARAMETER_*), like NaN and text.
+describe('XBV-315: positive / nonnegative parameters refuse Infinity at compile', () => {
+  const paramErrors = (type: string, params: Record<string, unknown>) =>
+    new XbridgesEngine(buildModel({ blocks: [{ id: 'u', type, params }], wires: [] })).compile(0)
+      .filter((d) => d.severity === 'error' && d.code.startsWith('PARAMETER_'));
+  for (const [type, param] of [['AC_INDUCTION_MOTOR', 'J'], ['ROBOT_VACUUM_MOTOR', 'motor_R'], ['PWM_GENERATOR', 'frequency']] as const) {
+    for (const v of [Infinity, -Infinity]) {
+      it(`${type}.${param} = ${v}: a PARAMETER_* error`, () => {
+        expect(paramErrors(type, { [param]: v }).length).toBeGreaterThan(0);
+      });
+    }
+  }
+});
