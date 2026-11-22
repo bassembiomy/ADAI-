@@ -2,7 +2,7 @@
 // Stiff solvers for X-Bridges: ode14x (fixed-step implicit extrapolation) and ode23tb (variable-step TR-BDF2).
 // The continuous state of every block with evaluateDerivatives is flattened into one Float64Array so that the
 // Jacobian is global (it couples blocks), as in Simulink.
-import { MAX_CONSECUTIVE_ZERO_CROSSINGS, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, crossingBlock, reportChatter, reportStepBudget } from './zeroCrossingGuard';
+import { ConsecutiveCrossings, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -538,7 +538,7 @@ export class StiffSolver {
     let tc = t;
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     let eventStep = false;
-    let zcRun = 0; // consecutive zero crossings without a regular step in between (XBV-408)
+    const crossings = new ConsecutiveCrossings(); // consecutive zero crossings within a tiny time window (XBV-408)
     let passes = 0;
     while (tc < tEnd && !engine.hasFatalError()) {
       if (++passes > MAX_INTERNAL_STEPS_LIVE) { reportStepBudget(engine, MAX_INTERNAL_STEPS_LIVE, tc, 'ode23tb'); return false; }
@@ -555,12 +555,11 @@ export class StiffSolver {
         if (res.candidate !== undefined && !eventStep) {
           const hEv = eventStepLength(engine, tc, hTry, statesPrev, res.candidate, engine.options?.zeroTol ?? 1e-6, hMin);
           if (hEv !== null) {
-            if (++zcRun > MAX_CONSECUTIVE_ZERO_CROSSINGS) { reportChatter(engine, StiffSolver.chatterBlock(engine, tc, hTry, statesPrev, res.candidate), tc, 'ode23tb'); return false; }
+            if (crossings.note(tc + hEv, hMin, 1e-9 * Math.max(1, Math.abs(tc)))) { reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, StiffSolver.chatterBlock(engine, tc, hTry, statesPrev, res.candidate), tc, 'ode23tb')); return false; }
             engine.commitStateUpdates(statesPrev); h = hEv; eventStep = true; continue;
           }
         }
         if (res.accepted) {
-          if (!eventStep) zcRun = 0;
           eventStep = false;
           if (!reaches) { engine.computeOutputs(tc + hTry); engine.updateDiscreteStates(tc + hTry); }
         }
@@ -602,7 +601,7 @@ export class StiffSolver {
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     const zeroTol = options.zeroTol ?? 1e-6;
     let eventStep = false;
-    let zcRun = 0; // consecutive zero crossings without a regular step in between (XBV-408)
+    const crossings = new ConsecutiveCrossings(); // consecutive zero crossings within a tiny time window (XBV-408)
     let passes = 0;
 
     while (stopTime - t > landTol && !engine.hasFatalError()) {
@@ -627,14 +626,14 @@ export class StiffSolver {
         if (res.candidate !== undefined && !eventStep) {
           const hEv = eventStepLength(engine, t, hTry, statesPrev, res.candidate, zeroTol, hMin);
           if (hEv !== null) {
-            if (++zcRun > MAX_CONSECUTIVE_ZERO_CROSSINGS) { reportChatter(engine, StiffSolver.chatterBlock(engine, t, hTry, statesPrev, res.candidate), t, 'ode23tb'); break; }
+            if (crossings.note(t + hEv, hMin, Math.min(zeroTol, 1e-9 * Math.max(1, Math.abs(t))))) { reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, StiffSolver.chatterBlock(engine, t, hTry, statesPrev, res.candidate), t, 'ode23tb')); break; }
             engine.commitStateUpdates(statesPrev);
             h = hEv; // retake up to the event with the error test; shorter than the event, so it is not found again
             eventStep = true;
             continue;
           }
         }
-        if (res.accepted) { if (!eventStep) zcRun = 0; eventStep = false; }
+        if (res.accepted) eventStep = false;
       } else res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol);
       if (res.accepted) {
         t = hTry === remaining ? stopTime : t + hTry;

@@ -2,7 +2,7 @@
 // Variable-step explicit Runge-Kutta solvers: ode45 (Dormand-Prince) and ode23 (Bogacki-Shampine).
 // One error-controlled integration core serves the batch runs (Solvers.runFixedStep) and the live canvas step
 // (decision D3: the canvas controls the error with RelTol / AbsTol inside each output step).
-import { MAX_CONSECUTIVE_ZERO_CROSSINGS, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, crossingBlock, reportChatter, reportStepBudget } from './zeroCrossingGuard';
+import { ConsecutiveCrossings, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -213,7 +213,7 @@ export class AdaptiveSolver {
     let zcBase: Map<string, number[]> | null = null;
     let baseStates: Map<string, any> | null = null;
     let rollbacks = 0; // consecutive trial-point fault rollbacks since the last accepted step
-    let zcRun = 0; // consecutive zero crossings located without a regular step in between (XBV-408)
+    const crossings = new ConsecutiveCrossings(); // consecutive zero crossings within a tiny time window (XBV-408)
     let passes = 0;
     const maxPasses = cfg.batch ? MAX_INTERNAL_STEPS_BATCH : MAX_INTERNAL_STEPS_LIVE;
 
@@ -292,17 +292,16 @@ export class AdaptiveSolver {
         engine.computeOutputs(t + hTry, tr.candidate);
         const zcCurr = engine.getZeroCrossings(t + hTry, tr.candidate);
         if (engine.hasZeroCrossingSignChange(zcBase, zcCurr)) {
-          if (++zcRun > MAX_CONSECUTIVE_ZERO_CROSSINGS) {
-            reportChatter(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver');
+          const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
+          if (crossings.note(located.tHigh, cfg.hMin, EVENT_TIME_TOL)) {
+            reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver'));
             return { ok: false, hNext: h };
           }
-          const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
           event = located.tLow - t < cfg.hMin ? { tLow: t, tHigh: located.tHigh } : located;
           continue; // same base state and first stage, new target
         }
       }
 
-      if (!sliver && event === null) zcRun = 0; // a regular step without a crossing ends the run of crossings
       engine.commitStateUpdates(tr.candidate);
       rollbacks = 0;
       if (reachesTarget) { t = target; cTime = 0.0; }

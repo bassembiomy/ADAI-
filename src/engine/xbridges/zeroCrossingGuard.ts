@@ -24,12 +24,29 @@ function reportError(engine: XbridgesEngine, code: string, message: string) {
   if (!engine.diagnostics.some(d => d.code === code)) engine.diagnostics.push({ severity: 'error', code, message });
 }
 
-export function reportChatter(engine: XbridgesEngine, blockId: string | null, t: number, solver: string) {
+/** Message of the chatter diagnostic; the solver emits it with reportError(engine, 'ZERO_CROSSING_CHATTER', ...). */
+export function chatterMessage(engine: XbridgesEngine, blockId: string | null, t: number, solver: string): string {
   const block = blockId !== null ? engine.getBlock(blockId) : undefined;
   const name = blockId === null ? 'a block' : `block '${blockId}'${block?.type ? ` (${block.type})` : ''}`;
-  reportError(engine, 'ZERO_CROSSING_CHATTER',
-    `Zero crossing limit of ${MAX_CONSECUTIVE_ZERO_CROSSINGS} consecutive crossings exceeded at ${name}, t = ${t} (${solver}). ` +
-    'The model chatters across a discontinuity (e.g. a sliding mode); use a fixed-step solver or add hysteresis / a dead band to the switching block.');
+  return `Zero crossing limit of ${MAX_CONSECUTIVE_ZERO_CROSSINGS} consecutive crossings exceeded at ${name}, t = ${t} (${solver}). ` +
+    'The model chatters across a discontinuity (e.g. a sliding mode); use a fixed-step solver or add hysteresis / a dead band to the switching block.';
+}
+
+/**
+ * Counts consecutive zero crossings as Simulink does: a crossing is consecutive only when its time lies within a tiny
+ * window of the previous one (the resolution of the event location, hMin, rounding of t); otherwise the count restarts.
+ * A model with many genuine, well separated events (PWM at 20 kHz) therefore never reaches the limit.
+ */
+export class ConsecutiveCrossings {
+  private last = Number.NaN;
+  private count = 0;
+  /** Registers a crossing located at `tEvent`; returns true when the limit is exceeded. */
+  note(tEvent: number, hMin: number, locationTol: number): boolean {
+    const window = Math.max(10 * hMin, 128 * Number.EPSILON * Math.abs(tEvent), 10 * locationTol);
+    this.count = Number.isFinite(this.last) && Math.abs(tEvent - this.last) <= window ? this.count + 1 : 1;
+    this.last = tEvent;
+    return this.count > MAX_CONSECUTIVE_ZERO_CROSSINGS;
+  }
 }
 
 export function reportStepBudget(engine: XbridgesEngine, limit: number, t: number, solver: string) {

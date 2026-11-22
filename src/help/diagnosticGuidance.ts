@@ -117,6 +117,7 @@ export const XBRIDGES_SIMULATION_DIAGNOSTIC_GUIDANCE: Record<string, string> = {
   UNIT_INCONSISTENCY: 'Warning: The two connected ports declare different units. A port with unit inherit never conflicts. Make the units agree or insert a gain that converts them.',
   UNKNOWN_BLOCK_TYPE: 'Error: A block has a type that has no block definition in the library (for example a file written by a newer version, or a mistyped type). The model is not compiled. Replace the block with a library block.',
   UNSUPPORTED_SOLVER: 'Error: The solver identifier is not one the batch runner supports, so nothing was simulated. Choose a solver from the Solver Method list.',
+  ZERO_CROSSING_CHATTER: 'Error: The model crossed a discontinuity (Switch, Relay, Saturation, ...) more than 1000 times in a row without making progress, as a sliding mode does, so a variable-step solver (ode23, ode45, ode23tb) stopped. Use a fixed-step solver, or add hysteresis or a dead band to the named block.',
 };
 
 /**
@@ -158,7 +159,6 @@ export const XBRIDGES_EMBEDDED_DIAGNOSTIC_GUIDANCE: Record<string, string> = {
   XB_STEP_PARAM_INVALID: 'Error: A Step block parameter is not numeric. Enter numbers for step_time, initial_value and final_value.',
   XB_STEP_PARAM_MISSING: 'Error: A Step block lacks step_time, initial_value or final_value. Set all three parameters.',
   XB_TARGET_CAPABILITY_MISSING: 'Error: The block or port needs something the target lacks: an unsupported numeric type, a dimension above the target limit, or math-library support. Choose a supported numeric type, reduce the size, or select a target with the math library.',
-  ZERO_CROSSING_CHATTER: 'Error: The model crossed a discontinuity (Switch, Relay, Saturation, ...) more than 1000 times in a row without making progress, as a sliding mode does, so a variable-step solver (ode23, ode45, ode23tb) stopped. Use a fixed-step solver, or add hysteresis or a dead band to the named block.',
 };
 export function diagnosticReference(guidance: Record<string, string>): string {
   return Object.entries(guidance).map(([code, meaning]) => `• ${code}: ${meaning}`).join('\n\n');
