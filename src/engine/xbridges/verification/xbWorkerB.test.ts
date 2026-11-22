@@ -287,9 +287,9 @@ const PIN_BLOCKS: Record<string, string[]> = {
 // which keeps -Infinity / NaN; only a JSON round trip turns the sentinels of AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL into null.
 const EXPECTED: Record<Variant, string[]> = {
   json10: ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL'],
-  json7: ['AC_MOTOR_PID_CONTROL', 'AIR_FRYER_LEARNING_MODEL', 'DISCRETE_TRANSFER_FUNCTION', 'INTEGRATOR_DISCRETE', 'UNIT_DELAY'],
+  json7: ['AC_MOTOR_PID_CONTROL'],
   clone10: [],
-  clone7: ['AIR_FRYER_LEARNING_MODEL', 'DISCRETE_TRANSFER_FUNCTION', 'INTEGRATOR_DISCRETE', 'UNIT_DELAY'],
+  clone7: [], // XBV-400 acceptance (WP-21 batch W1)
 };
 
 describe('part 1: snapshot round trip of every stateful block (uninterrupted run is the oracle)', () => {
@@ -326,10 +326,10 @@ describe('part 1 pins', () => {
     const hit = (Object.keys(v) as Variant[]).flatMap((k) => Object.keys(v[k]).filter((t) => mine.has(t)).map((t) => `${k}/${t}`));
     expect(hit, PIN_CAUSE[id]).toEqual([]);
   };
-  it.fails('XBV-400: a resume between sample hits publishes the held output of UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER (the snapshot has no signal values)', () => none('XBV-400'), 120_000);
+  it('XBV-400: a resume between sample hits publishes the held output of UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER (the snapshot has no signal values)', () => none('XBV-400'), 120_000);
 
   // Consequence of XBV-400 in a model: the held value feeds a downstream integrator, so the resumed run diverges.
-  it.fails('XBV-400: Sine -> UNIT_DELAY(0.2 s) -> Integrator resumed at t = 0.35 ends with the same integrator state as the uninterrupted run', async () => {
+  it('XBV-400: Sine -> UNIT_DELAY(0.2 s) -> Integrator resumed at t = 0.35 ends with the same integrator state as the uninterrupted run', async () => {
     const spec: Spec = {
       blocks: [{ id: 'w', type: 'WaveformGen', params: { type: 'Sine', amp: 1, freq: 0.7, offset: 1, phase: 0 } },
         { id: 'd', type: 'UNIT_DELAY', params: { sampleTime: 0.2, initialCondition: 0 } }, { id: 'x', type: 'Integrator', params: { initialCondition: 0 } }],
@@ -403,7 +403,7 @@ describe('part 2: a block fault in the middle of a batch leaves a whole number o
   };
   const FAULT: Spec = { blocks: [...RAMP.blocks, { id: 'm', type: '__TEST_THROWS_LATE__' }], wires: [...RAMP.wires, 'c.out -> m.u'] };
 
-  const FAULT_PINS: Record<string, string> = { ode2: 'XBV-403', ode3: 'XBV-403', rk4: 'XBV-403', ode5: 'XBV-404', ode23: 'XBV-404', ode45: 'XBV-404' };
+  const FAULT_PINS: Record<string, string> = {}; // XBV-403 / XBV-404 acceptance (WP-21 batch S2)
   for (const solver of ['euler', 'ode2', 'ode3', 'rk4', 'ode5', 'ode23', 'ode45', 'ode14x', 'ode23tb']) {
     const body = async () => {
       await withThrower(() => {
@@ -483,10 +483,7 @@ const shiftStep = (id: string, t: number, from: number, to: number): Spec['block
 // ZeroCrossingFn only), so the worker never runs the discrete update of a hybrid block. XBV-406: with a variable-step solver that
 // leaves the worker in an endless event-location loop (checked in a child process below, a hang cannot be an in-process test).
 const HANGS = ['PT_AUTOMATED_MANUAL_TRANSMISSION/ode23', 'PT_DUAL_CLUTCH_TRANSMISSION/ode23', 'PT_AUTOMATED_MANUAL_TRANSMISSION/ode23tb', 'PT_DUAL_CLUTCH_TRANSMISSION/ode23tb', 'PT_DISC_CLUTCH/ode23tb'];
-const SHIFT_PINS: Record<string, string> = Object.fromEntries([
-  ...['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DUAL_CLUTCH_TRANSMISSION'].flatMap((n) => ['rk4', 'ode45', 'ode14x'].map((s) => [`${n}/${s}`, 'XBV-405'])),
-  ...['rk4', 'ode23', 'ode45', 'ode14x'].map((s) => [`PT_DISC_CLUTCH/${s}`, 'XBV-405']),
-]);
+const SHIFT_PINS: Record<string, string> = {}; // XBV-405 acceptance (WP-21 batch W1)
 const SHIFT_MODELS: Record<string, { spec: Spec; shifted: (states: Record<string, any>) => boolean }> = {
   PT_AUTOMATED_MANUAL_TRANSMISSION: {
     spec: {
@@ -533,7 +530,8 @@ describe('part 3: hybrid PT blocks across a gear shift: worker steps = main-thre
         expect(firstDiff(rows[10].main.states, rows[99].main.states)).not.toBeNull();
         expect(firstMismatch(rows)).toBeNull();
       };
-      if (HANGS.includes(`${name}/${solver}`)) it.skip(`XBV-406 ${name} ${solver}: the worker never returns (see the child-process test below)`, body);
+      // A hang cannot be interrupted in process: the XBV-406 cases run only in the child-process test below (acceptance there).
+      if (HANGS.includes(`${name}/${solver}`)) it.skip(`XBV-406 ${name} ${solver}: checked in the child-process test below`, body);
       else (pinned ? it.fails : it)(`${pinned ? `${pinned} ` : ''}${name} ${solver}`, body, 60_000);
     }
   }
@@ -583,7 +581,7 @@ for (let k = 0; k < 100; k++) liveStep(e, solver, k * 0.01, 0.01);
 const hangsControl = () => hangs('PT_DISC_CLUTCH', 'ode23');
 
 describe('part 3: hang check in a child process', () => {
-  it.fails('XBV-406: the worker returns for 100 steps of ode23 / ode23tb on the hybrid PT blocks (it never does: 25 s kill)', async () => {
+  it('XBV-406: the worker returns for 100 steps of ode23 / ode23tb on the hybrid PT blocks (it never does: 25 s kill)', async () => {
     const hung = await Promise.all(HANGS.map((h) => { const [n, s] = h.split('/'); return hangs(n, s); }));
     expect(hung, PIN_CAUSE['XBV-406']).toEqual(HANGS.map(() => false));
   }, 60_000);
@@ -592,7 +590,7 @@ describe('part 3: hang check in a child process', () => {
     expect(await slidingHangs('rk4')).toBe(false);
   }, 60_000);
 
-  it.fails('XBV-408: Integrator -> SWITCH chattering sliding mode returns (or stops with a diagnostic) under ode23, ode45 and ode23tb', async () => {
+  it('XBV-408: Integrator -> SWITCH chattering sliding mode returns (or stops with a diagnostic) under ode23, ode45 and ode23tb', async () => {
     const hung = await Promise.all(['ode23', 'ode45', 'ode23tb'].map(slidingHangs));
     expect(hung, PIN_CAUSE['XBV-408']).toEqual([false, false, false]);
   }, 60_000);
@@ -631,7 +629,7 @@ async function farParityAll(): Promise<{ bad: Record<string, string>; skipped: s
 }
 
 /** Blocks pinned for the full-parameter / far-time parity (ratchet). */
-const FAR_EXPECTED = ['INTEGRATOR', 'PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DISC_CLUTCH', 'PT_DUAL_CLUTCH_TRANSMISSION'];
+const FAR_EXPECTED: string[] = []; // XBV-405 / XBV-407 acceptance (WP-21 batch W1)
 const FAR_PINS: Record<string, string[]> = { 'XBV-405': ['PT_AUTOMATED_MANUAL_TRANSMISSION', 'PT_DISC_CLUTCH', 'PT_DUAL_CLUTCH_TRANSMISSION'], 'XBV-407': ['INTEGRATOR'] };
 /** Blocks whose factory defaults fault on the main thread under every stimulus of the harness (nothing to compare; coverage gap, not a result). */
 const FAR_SKIPPED = ['BUS_SELECTOR', 'DEMUX', 'DOE_MODEL', 'FUZZY_DEFUZZIFY', 'FUZZY_SURFACE_VIEWER', 'MatrixSolve', 'PT_CI_CORE_ENGINE', 'PT_COMPRESSOR', 'PT_FLOW_RESTRICTION', 'PT_HEAT_EXCHANGER', 'PT_TURBINE', 'PT_VVT_VALVETRAIN', 'SWITCH_CASE', 'SubMatrix'];
@@ -654,14 +652,14 @@ describe('part 4: full node parameters at start time 1e6 s: worker = main thread
   }, 120_000);
 
   for (const [id, types] of Object.entries(FAR_PINS)) {
-    it.fails(`${id}: ${types.join(', ')} with all factory parameters from t = 1e6: worker = main thread`, async () => {
+    it(`${id}: ${types.join(', ')} with all factory parameters from t = 1e6: worker = main thread`, async () => {
       const { bad } = await farAll();
       expect(types.filter((t) => t in bad), PIN_CAUSE[id]).toEqual([]);
     }, 120_000);
   }
 
   // XBV-407 consequence in a model: the limit of INTEGRATOR is ignored by the worker.
-  it.fails('XBV-407: INTEGRATOR with limitOutput (upper limit 0.2) integrating 1: worker = main thread, state stays at 0.2', async () => {
+  it('XBV-407: INTEGRATOR with limitOutput (upper limit 0.2) integrating 1: worker = main thread, state stays at 0.2', async () => {
     const spec: Spec = { blocks: [{ id: 'c', type: 'Constant', params: { value: 1 } }, { id: 'i', type: 'INTEGRATOR', params: { limitOutput: true, upperLimit: 0.2, lowerLimit: -1 } }], wires: ['c.out -> i.u'] };
     const rows = await parity(spec, 'rk4', 0.05, 10, 0);
     expect(Number((rows[9].main.states as Record<string, { x: number }>).i.x)).toBeCloseTo(0.2, 9);
