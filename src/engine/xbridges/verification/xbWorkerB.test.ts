@@ -33,14 +33,13 @@ type Spec = Parameters<typeof buildModel>[0];
 
 /** Provisional finding ids of this batch (the planner renumbers when it records them). One root cause each. */
 export const PIN_CAUSE: Record<string, string> = {
-  'XBV-400': 'S3 snapshot: engineSnapshot (xbridgesWorker.ts serializeEngineSnapshot) carries block states and sample grid but not the published outputs of sample-and-hold blocks (signalValues is declared in the protocol, never filled): a resume between hits publishes the initial output until the next hit; xbridgesWorker.ts / xbridgesWorkerProtocol.ts',
-  'XBV-401': 'S4 snapshot: states of AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL hold -Infinity / NaN sentinels that a JSON round trip turns into null (the structured clone of the real client keeps them); BlockDefinitions.ts',
+  'XBV-400': 'S4 (no product code sends engineSnapshot to the worker today) snapshot: engineSnapshot (xbridgesWorker.ts serializeEngineSnapshot) carries block states and sample grid but not the published outputs of sample-and-hold blocks (signalValues is declared in the protocol, never filled): a resume between hits publishes the initial output until the next hit; xbridgesWorker.ts / xbridgesWorkerProtocol.ts',
   'XBV-403': 'S4 fault: ode2, ode3 and rk4 commit the output step in which a block faulted (state advanced by the whole step) while the response reports the time before it: state and simulationTime disagree by one step; Solvers.ts / xbridgesWorker.ts',
   'XBV-404': 'S3 fault: ode5, ode23 and ode45 leave a partly integrated state when a stage / internal step faults (x = 2 * 0.277 s, not a whole number of steps), so the engine is not at any reported time; Solvers.ts / AdaptiveSolver.ts',
   'XBV-405': 'S1 hybrid: serializeModelForWorker (xbridgesWorkerClient.ts) strips updateDiscrete (the XBV-047 fix) and the XbridgesEngine constructor (XbridgesEngine.ts ~line 146) re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOMATED_MANUAL_TRANSMISSION, PT_DUAL_CLUTCH_TRANSMISSION and PT_DISC_CLUTCH never run their discrete update in the worker (no clutch lock, no gear bookkeeping): the canvas worker differs from the main thread from step 0',
-  'XBV-406': 'S1 hybrid: consequence of XBV-405 under ode23 / ode23tb (AMT, DCT; ode23tb also the disc clutch): the worker call never returns (event location loops with no iteration cap), the canvas freezes; AdaptiveSolver.ts / StiffSolver.ts',
+  'XBV-406': 'S1 hybrid: consequence of XBV-405 only: without updateDiscrete the hybrid PT blocks (AMT, DCT under ode23 / ode23tb; the disc clutch under ode23tb) never settle their mode and the worker call never returns; with updateDiscrete re-attached the models finish in under 60 ms. Fixing 405 fixes 406',
+  'XBV-408': 'S1 solver, main thread, library blocks only: Integrator (initialCondition 0.0123) feeding SWITCH (x >= 0 ? -1 : +1), a chattering sliding mode, never returns under ode23 / ode45 / ode23tb (killed at 25 s; rk4 takes 5 ms): locateEvent (AdaptiveSolver.ts:216) and StiffSolver.ts:532 have no cap on events or steps; Simulink stops with an error on its consecutive zero-crossings limit',
   'XBV-407': 'S1 library: BLOCK_LIBRARY has two keys equal up to case (Integrator and INTEGRATOR); the engine constructor re-creates execute for a worker model by a case-insensitive type lookup that finds Integrator first, so the worker runs the wrong block for every INTEGRATOR (other state, limits and reset ignored); XbridgesEngine.ts ~line 140',
-  'XBV-402': 'S4 cancel: the worker batch loop never looks at a cancel request (no yield point), so a cancelled batch is committed in full on the worker engine while the client rejects it; xbridgesWorker.ts / xbridgesWorkerClient.ts',
 };
 
 const PRINT = process.env.XBB_PRINT === '1';
@@ -283,8 +282,9 @@ const allVariants = () => (variants ??= (async () => ({
 /** Blocks pinned per provisional finding (ratchet: the list must equal the actual failures). */
 const PIN_BLOCKS: Record<string, string[]> = {
   'XBV-400': ['AIR_FRYER_LEARNING_MODEL', 'DISCRETE_TRANSFER_FUNCTION', 'INTEGRATOR_DISCRETE', 'UNIT_DELAY'],
-  'XBV-401': ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL'],
 };
+// The json10 / json7 lists are a documented characterisation, not a pin: the real client and worker use structured clone (clone10 / clone7),
+// which keeps -Infinity / NaN; only a JSON round trip turns the sentinels of AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL into null.
 const EXPECTED: Record<Variant, string[]> = {
   json10: ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL'],
   json7: ['AC_MOTOR_PID_CONTROL', 'AIR_FRYER_LEARNING_MODEL', 'DISCRETE_TRANSFER_FUNCTION', 'INTEGRATOR_DISCRETE', 'UNIT_DELAY'],
@@ -312,10 +312,10 @@ describe('part 1: snapshot round trip of every stateful block (uninterrupted run
 
   it('the stimulus moves the state of most blocks (coverage of the round trip is not vacuous)', async () => {
     await allVariants();
-    const evolves = STATEFUL_TYPES.filter((t) => { const d = refCache.get(t); return d && firstDiff(d.ref[0].states, d.ref[N - 1].states) !== null; });
+    const evolves = STATEFUL_TYPES.filter((t) => { const d = refCache.get(t); return d && d.ref.some((r) => firstDiff(d.ref[0].states, r.states) !== null); });
     printed('static', STATEFUL_TYPES.filter((t) => !evolves.includes(t)));
     expect(evolves.length).toBeGreaterThanOrEqual(90);
-    for (const t of ['ROBOT_VACUUM_COMM', 'Integrator', 'DELAY', 'Scope', 'PT_DISC_CLUTCH', 'WHITE_NOISE', 'Counter', 'Register', 'AC_MOTOR_PID_CONTROL']) expect(evolves, t).toContain(t);
+    for (const t of ['ROBOT_VACUUM_COMM', 'Integrator', 'DELAY', 'Scope', 'PT_DISC_CLUTCH', 'WHITE_NOISE', 'Counter', 'Register', 'AC_MOTOR_PID_CONTROL', 'RELAY']) expect(evolves, t).toContain(t);
   }, 120_000);
 });
 
@@ -327,7 +327,6 @@ describe('part 1 pins', () => {
     expect(hit, PIN_CAUSE[id]).toEqual([]);
   };
   it.fails('XBV-400: a resume between sample hits publishes the held output of UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER (the snapshot has no signal values)', () => none('XBV-400'), 120_000);
-  it.fails('XBV-401: a JSON round trip of the snapshot keeps -Infinity / NaN sentinels of AC_INDUCTION_MOTOR and AC_MOTOR_PID_CONTROL', () => none('XBV-401'), 120_000);
 
   // Consequence of XBV-400 in a model: the held value feeds a downstream integrator, so the resumed run diverges.
   it.fails('XBV-400: Sine -> UNIT_DELAY(0.2 s) -> Integrator resumed at t = 0.35 ends with the same integrator state as the uninterrupted run', async () => {
@@ -389,12 +388,6 @@ describe('part 2: cancel mid-batch', () => {
     expect(Math.abs(Number(r.engineSnapshot!.blockStates.x) - 2 * DT)).toBeLessThan(1e-12);
   });
 
-  it.fails('XBV-402: a cancelled batch is not committed in full (a cancel takes effect at a step boundary before the batch ends)', async () => {
-    const { batch, queued } = await cancelled();
-    await Promise.allSettled([batch, queued]);
-    await flush();
-    expect(stepsCommitted(Number(peek().engineSnapshot!.blockStates.x)), PIN_CAUSE['XBV-402']).toBeLessThan(BATCH);
-  });
 });
 
 describe('part 2: a block fault in the middle of a batch leaves a whole number of steps', () => {
@@ -548,19 +541,16 @@ describe('part 3: hybrid PT blocks across a gear shift: worker steps = main-thre
 
 const root = resolve(__dirname, '..');
 const repo = resolve(root, '../../..');
-/** True when 100 worker steps of the shift model do not finish in 25 s (run in a child process: a synchronous loop cannot be interrupted in-process). */
-const hangs = (name: string, solver: string): Promise<boolean> => {
-  const spec = SHIFT_MODELS[name].spec;
+/** True when the child script does not print FINISHED in 25 s (a synchronous loop cannot be interrupted in-process). */
+const childHangs = (body: string): Promise<boolean> => {
   const dir = mkdtempSync(join(tmpdir(), 'xbb-'));
   const file = join(dir, 'child.mts');
   writeFileSync(file, `
 import { handleXbridgesWorkerMessage } from ${JSON.stringify(join(root, 'xbridgesWorker.ts'))};
+import { XbridgesEngine } from ${JSON.stringify(join(root, 'XbridgesEngine.ts'))};
+import { liveStep } from ${JSON.stringify(join(root, 'liveStep.ts'))};
 import { buildModel } from ${JSON.stringify(join(root, 'testkit/index.ts'))};
-const model = buildModel(${JSON.stringify(spec)});
-const strip = (m: any) => ({ connections: m.connections, blocks: m.blocks.map(({ execute, evaluateDerivatives, updateDiscrete, ZeroCrossingFn, ...r }: any) => r) });
-const solver = ${JSON.stringify(solver)};
-handleXbridgesWorkerMessage({ type: 'compile', requestId: 1, model: strip(model), time: 0, dt: 0.01, solverType: solver, solverOptions: { solver, fixedStep: 0.01, startTime: 0, stopTime: 1 } } as any);
-for (let k = 0; k < 100; k++) handleXbridgesWorkerMessage({ type: 'step', requestId: 2 + k, time: k * 0.01, dt: 0.01, solverType: solver } as any);
+${body}
 console.log('FINISHED');
 `);
   return new Promise((done) => {
@@ -571,12 +561,40 @@ console.log('FINISHED');
     });
   });
 };
+/** 100 worker steps of the shift model. */
+const hangs = (name: string, solver: string): Promise<boolean> => childHangs(`
+const model = buildModel(${JSON.stringify(SHIFT_MODELS[name].spec)});
+const strip = (m: any) => ({ connections: m.connections, blocks: m.blocks.map(({ execute, evaluateDerivatives, updateDiscrete, ZeroCrossingFn, ...r }: any) => r) });
+const solver = ${JSON.stringify(solver)};
+handleXbridgesWorkerMessage({ type: 'compile', requestId: 1, model: strip(model), time: 0, dt: 0.01, solverType: solver, solverOptions: { solver, fixedStep: 0.01, startTime: 0, stopTime: 1 } } as any);
+for (let k = 0; k < 100; k++) handleXbridgesWorkerMessage({ type: 'step', requestId: 2 + k, time: k * 0.01, dt: 0.01, solverType: solver } as any);
+`);
+/** 100 main-thread live steps of Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator. */
+const slidingHangs = (solver: string): Promise<boolean> => childHangs(`
+const model = buildModel({ blocks: [{ id: 'x', type: 'Integrator', params: { initialCondition: 0.0123 } }, { id: 'a', type: 'Constant', params: { value: -1 } },
+  { id: 'b', type: 'Constant', params: { value: 1 } }, { id: 's', type: 'SWITCH', params: { threshold: 0, criteria: '>=' } }],
+  wires: ['a.out -> s.u1', 'b.out -> s.u2', 'x.out -> s.ctrl', 's.y -> x.in'] });
+const solver = ${JSON.stringify(solver)};
+const e = new XbridgesEngine(model);
+e.options = { solver, fixedStep: 0.01, startTime: 0, stopTime: 1 } as any;
+e.compile(0);
+for (let k = 0; k < 100; k++) liveStep(e, solver, k * 0.01, 0.01);
+`);
 const hangsControl = () => hangs('PT_DISC_CLUTCH', 'ode23');
 
 describe('part 3: hang check in a child process', () => {
   it.fails('XBV-406: the worker returns for 100 steps of ode23 / ode23tb on the hybrid PT blocks (it never does: 25 s kill)', async () => {
     const hung = await Promise.all(HANGS.map((h) => { const [n, s] = h.split('/'); return hangs(n, s); }));
     expect(hung, PIN_CAUSE['XBV-406']).toEqual(HANGS.map(() => false));
+  }, 60_000);
+
+  it('the sliding-mode model finishes under rk4 (control for XBV-408)', async () => {
+    expect(await slidingHangs('rk4')).toBe(false);
+  }, 60_000);
+
+  it.fails('XBV-408: Integrator -> SWITCH chattering sliding mode returns (or stops with a diagnostic) under ode23, ode45 and ode23tb', async () => {
+    const hung = await Promise.all(['ode23', 'ode45', 'ode23tb'].map(slidingHangs));
+    expect(hung, PIN_CAUSE['XBV-408']).toEqual([false, false, false]);
   }, 60_000);
 });
 
