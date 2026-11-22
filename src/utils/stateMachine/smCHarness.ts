@@ -1,4 +1,4 @@
-import { limitCIdentifiersInSource } from './smCIdentifierPolicy';
+import { limitCIdentifiersInSource, limitCIdentifierLength } from './smCIdentifierPolicy';
 import { execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
@@ -435,10 +435,10 @@ const cString = (value: string): string =>
     .replaceAll('\n', '\\n')}"`;
 
 const stateIndex = (state: SemanticState): string =>
-  `${state.enumName}_IDX`;
+  limitCIdentifierLength(`${state.enumName}_IDX`);
 
 const layerMacro = (layer: SemanticLayer): string =>
-  `SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`;
+  limitCIdentifierLength(`SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`);
 
 const orderedChannels = (ir: SemanticModel): string[] =>
   [...new Set(ir.ioMappings.map((mapping) => mapping.channelId))]

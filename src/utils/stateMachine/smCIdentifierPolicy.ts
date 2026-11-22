@@ -118,10 +118,14 @@ export function limitCIdentifierLength(identifier: string): string {
   return `${identifier.slice(0, C99_SIGNIFICANT_CHARACTERS - hash.length - 1)}_${hash}`;
 }
 
-/** Applies limitCIdentifierLength to every identifier token of generated C text longer than 63 characters. */
+/**
+ * Applies limitCIdentifierLength to every identifier token of generated C text longer than 63 characters.
+ * Comments, string literals and character constants are copied unchanged, so model ids in trace strings and
+ * comments keep their original text.
+ */
 export function limitCIdentifiersInSource(source: string): string {
   return source.replace(
-    /(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]{63,}/g,
-    (token) => limitCIdentifierLength(token),
+    /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)+'|(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]{63,}/g,
+    (token) => /^[A-Za-z_]/.test(token) ? limitCIdentifierLength(token) : token,
   );
 }

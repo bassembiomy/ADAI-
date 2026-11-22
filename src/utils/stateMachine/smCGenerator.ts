@@ -1,4 +1,4 @@
-import { limitCIdentifiersInSource } from './smCIdentifierPolicy';
+import { limitCIdentifierLength } from './smCIdentifierPolicy';
 import type { ErrorItem } from '../../types/sm_types';
 import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
@@ -100,7 +100,7 @@ const stateNode = (ir: SemanticModel, stateId: string): string =>
   ir.states[stateId].enumName;
 
 const stateIndex = (ir: SemanticModel, stateId: string): string =>
-  `${stateNode(ir, stateId)}_IDX`;
+  limitCIdentifierLength(`${stateNode(ir, stateId)}_IDX`);
 
 const xbStateFunction = (
   state: SemanticState,
@@ -109,7 +109,7 @@ const xbStateFunction = (
   const suffix = toCIdentifier(
     state.enumName.replace(/^SM_ST_/, ''),
   ).toUpperCase();
-  return `SM_XB_${suffix}_${phase}`;
+  return limitCIdentifierLength(`SM_XB_${suffix}_${phase}`);
 };
 
 const stateFunction = (
@@ -125,7 +125,7 @@ const layerFunction = (
 ): string => `${prefix}_${index.layerNumber.get(layerId)!}`;
 
 const layerMacro = (layer: SemanticLayer): string =>
-  `SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`;
+  limitCIdentifierLength(`SM_LYR_${toCIdentifier(layer.id).toUpperCase()}_IDX`);
 
 const descendantsOfLayer = (
   ir: SemanticModel,
@@ -913,7 +913,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
       `#define ${layerMacro(layer)} ${index.layerNumber.get(layer.id)!}U`),
     ...states.flatMap((state) => [
       stateTraceComment(state),
-      `#define ${stateNode(ir, state.id)}_IDX ${index.stateNumber.get(state.id)!}U`,
+      `#define ${stateIndex(ir, state.id)} ${index.stateNumber.get(state.id)!}U`,
     ]),
     '',
     'typedef enum {',
@@ -1976,16 +1976,8 @@ export const generateCArtifacts = (
   options: CGeneratorOptions = {},
 ): CGeneratorResult =>
   // Only the AUTOSAR platform guards division; Generate C/H output stays byte-identical.
-  limitGeneratedIdentifiers(withGuardedDivision(options.platform === 'autosar' && modelNeedsGuardedArithmetic(ir), () =>
-    generateCArtifactsUnguarded(ir, options)));
-
-/** C99 5.2.4.1: one mapping (smCIdentifierPolicy) over every generated C/H file so callers and definitions agree. */
-const limitGeneratedIdentifiers = (result: CGeneratorResult): CGeneratorResult => ({
-  ...result,
-  files: result.files.map((file) => /\.(?:c|h|cpp|ino)$/i.test(file.name)
-    ? { ...file, content: limitCIdentifiersInSource(file.content) }
-    : file),
-});
+  withGuardedDivision(options.platform === 'autosar' && modelNeedsGuardedArithmetic(ir), () =>
+    generateCArtifactsUnguarded(ir, options));
 
 const generateCArtifactsUnguarded = (
   ir: SemanticModel,
