@@ -20,19 +20,19 @@ export function crossingBlock(zcA: Map<string, number[]>, zcB: Map<string, numbe
   return null;
 }
 
-function reportOnce(engine: XbridgesEngine, code: string, message: string) {
+function reportError(engine: XbridgesEngine, code: string, message: string) {
   if (!engine.diagnostics.some(d => d.code === code)) engine.diagnostics.push({ severity: 'error', code, message });
 }
 
 export function reportChatter(engine: XbridgesEngine, blockId: string | null, t: number, solver: string) {
   const block = blockId !== null ? engine.getBlock(blockId) : undefined;
   const name = blockId === null ? 'a block' : `block '${blockId}'${block?.type ? ` (${block.type})` : ''}`;
-  reportOnce(engine, 'ZERO_CROSSING_CHATTER',
+  reportError(engine, 'ZERO_CROSSING_CHATTER',
     `Zero crossing limit of ${MAX_CONSECUTIVE_ZERO_CROSSINGS} consecutive crossings exceeded at ${name}, t = ${t} (${solver}). ` +
     'The model chatters across a discontinuity (e.g. a sliding mode); use a fixed-step solver or add hysteresis / a dead band to the switching block.');
 }
 
 export function reportStepBudget(engine: XbridgesEngine, limit: number, t: number, solver: string) {
-  reportOnce(engine, 'STIFF_SOLVER_STEP_TOO_SMALL',
+  reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL',
     `${solver} needed more than ${limit} internal steps and stopped at t = ${t}: the steps became too small to make progress. Loosen the tolerance or change the model.`);
 }
