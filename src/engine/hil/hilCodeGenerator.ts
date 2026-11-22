@@ -1,6 +1,6 @@
 import { HILConfig } from './hilTypes';
 import { cDataMemberName } from '../../utils/stateMachine/smCIdentifierPolicy';
-import { hilDriverTemplates } from './hilDriverTemplates';
+import { hilDriverTemplates, GENERIC_SIMULATION_ARRAYS, GENERIC_PIN_INDEX_HELPER } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
 import { validatePinAssignments } from './pinValidator';
@@ -9,15 +9,23 @@ import { defaultTargetPackFor } from '../targetPacks/defaultTargetPacks';
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
 
 /*
- * The Generic template defines static inline channel helpers (HAL_UART_ReadChannel, ...).
- * Keep only the helpers that a configured channel references, so that clang -Wall -Werror
- * does not report unused static functions. Other targets are not passed through here.
+ * The Generic template defines static inline channel helpers (HAL_UART_ReadChannel, ...) and
+ * simulation storage. Keep only what a configured channel references, so that clang -Wall -Werror
+ * does not report unused static objects or functions. Other targets are not passed through here.
  */
-function pruneGenericChannelHelpers(globals: string, used: Record<string, boolean>): string {
-  return globals.replace(
+function pruneGenericGlobals(
+  globals: string,
+  usedHelpers: Record<string, boolean>,
+  simulationUsed: boolean
+): string {
+  const withoutUnusedHelpers = globals.replace(
     /static inline [^\n]*?\b(HAL_(?:UART|SPI)_(?:Read|Write)Channel)\([^)]*\) \{\n[\s\S]*?\n\}\n?/g,
-    (block: string, name: string) => (used[name] ? block : '')
+    (block: string, name: string) => (usedHelpers[name] ? block : '')
   );
+  if (simulationUsed) return withoutUnusedHelpers;
+  return withoutUnusedHelpers
+    .replace(GENERIC_SIMULATION_ARRAYS, '')
+    .replace(GENERIC_PIN_INDEX_HELPER, '');
 }
 
 export function generateHALCode(
@@ -157,12 +165,12 @@ void HIL_Receive_Poll(void);
 #include <string.h>
 ${mcu.systemIncludes}
 
-${target === 'Generic' ? pruneGenericChannelHelpers(mcu.globals, {
+${target === 'Generic' ? pruneGenericGlobals(mcu.globals, {
   HAL_UART_ReadChannel: uartReadChannels.length > 0,
   HAL_UART_WriteChannel: uartWriteChannels.length > 0,
   HAL_SPI_ReadChannel: spiReadChannels.length > 0,
   HAL_SPI_WriteChannel: spiWriteChannels.length > 0,
-}) : mcu.globals}
+}, config.channels.some(ch => ['GPIO', 'ADC', 'DAC', 'PWM'].includes(ch.peripheral))) : mcu.globals}
 
 void HAL_Drivers_Init(void) {
     ${mcu.systemInit.trim()}
