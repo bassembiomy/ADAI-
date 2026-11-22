@@ -27,10 +27,21 @@ function serializeEngineSnapshot(engine: XbridgesEngine, time: number): Xbridges
     }
   }
 
+  // Published outputs of discrete / held blocks (they keep their value between sample hits).
+  const signalValues: Record<string, any> = {};
+  for (const block of engine.executionOrder) {
+    if (block.hitIndex === undefined || block.nextTick === undefined) continue;
+    for (const out of block.outputs) {
+      const val = engine.getSignalValue(block.id, out.id);
+      if (val !== undefined) signalValues[`${block.id}.${out.id}`] = val;
+    }
+  }
+
   return {
     time,
     blockStates,
     sampleGrid,
+    signalValues,
   };
 }
 
@@ -121,6 +132,11 @@ export function handleXbridgesWorkerMessage(request: XbridgesWorkerRequest): Xbr
       // An older snapshot has no sample grid: the engine keeps the grid compile() derived from the start time.
       for (const [id, grid] of Object.entries(request.engineSnapshot.sampleGrid ?? {})) {
         workerEngine.restoreSampleGrid(id, grid);
+      }
+      // Held outputs of discrete blocks (older snapshots have none: the compiled initial output stays).
+      for (const [key, value] of Object.entries(request.engineSnapshot.signalValues ?? {})) {
+        const dot = key.indexOf('.');
+        if (dot > 0) workerEngine.restoreHeldOutput(key.slice(0, dot), key.slice(dot + 1), value);
       }
     }
 
