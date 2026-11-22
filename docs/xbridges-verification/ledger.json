@@ -2609,24 +2609,27 @@
    "plan_ref": "4.4 worker",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOMATED_MANUAL_TRANSMISSION, PT_DUAL_CLUTCH_TRANSMISSION and PT_DISC_CLUTCH differ from the main thread from step 0 (the clutch never locks). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOMATED_MANUAL_TRANSMISSION, PT_DUAL_CLUTCH_TRANSMISSION and PT_DISC_CLUTCH differ from the main thread from step 0 (the clutch never locks). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch W1: the XbridgesEngine constructor re-creates every function member the block's factory defines (called with the block's own params), so the worker runs updateDiscrete; AMT / DCT / disc clutch worker = main thread sample for sample; 212 library types identical live vs JSON-stripped."
   },
   {
    "id": "XBV-406",
    "plan_ref": "4.4 worker",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch W1: consequence of XBV-405, resolved with it; the worker no longer hangs on the hybrid PT blocks under ode23 / ode23tb."
   },
   {
    "id": "XBV-407",
    "plan_ref": "4.4 worker",
    "severity": "S1",
    "gate": "V6",
-   "status": "open",
-   "summary": "BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so output limits and reset are ignored (limited x 1.0 instead of 0.2). The main-thread canvas looks types up exactly and is not affected. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so output limits and reset are ignored (limited x 1.0 instead of 0.2). The main-thread canvas looks types up exactly and is not affected. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch W1: block types resolve by exact key first, then case-insensitively; Integrator / INTEGRATOR is the only case-only pair; other case variants in saved models still load."
   },
   {
    "id": "XBV-408",
@@ -2657,8 +2660,9 @@
    "plan_ref": "4.4 worker",
    "severity": "S4",
    "gate": "V4",
-   "status": "open",
-   "summary": "The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER_LEARNING_MODEL). No product code sends a snapshot to the worker today. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+   "status": "closed",
+   "summary": "The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER_LEARNING_MODEL). No product code sends a snapshot to the worker today. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.",
+   "fix": "WP-21 batch W1: the worker snapshot carries the published values of sampled blocks; restoreHeldOutput restores them and the ZOH cache, so a resume between hits publishes the held output; old snapshots fall back; non-sampled blocks are never overwritten."
   }
  ],
  "blocks": {

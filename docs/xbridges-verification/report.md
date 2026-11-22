@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 22 done of 29; 2 in progress; 5 to do.
-- Findings: 7 open, 213 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 4 open
+- Findings: 3 open, 217 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 1 open
   - S2 (crash, stop, freeze or silent no-op): 0 open
   - S3 (diagnostic, UI or convention deviation): 1 open
-  - S4 (documentation): 2 open
+  - S4 (documentation): 1 open
 - Decisions recorded: 17; open: 0.
 
 ## Work packages
@@ -64,13 +64,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S1 - wrong number in simulation or generated C (4)
+### S1 - wrong number in simulation or generated C (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-405 | V6 | 4.4 worker | The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOMATED_MANUAL_TRANSMISSION, PT_DUAL_CLUTCH_TRANSMISSION and PT_DISC_CLUTCH differ from the main thread from step 0 (the clutch never locks). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
-| XBV-406 | V5 | 4.4 worker | The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
-| XBV-407 | V6 | 4.4 worker | BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so output limits and reset are ignored (limited x 1.0 instead of 0.2). The main-thread canvas looks types up exactly and is not affected. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
 | XBV-408 | V5 | 4.4 worker | The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSolver.locateEvent (~216) and StiffSolver (~532) have no cap on events or steps; Simulink stops with an error after the consecutive zero-crossings limit. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
 
 ### S3 - diagnostic, UI or convention deviation (1)
@@ -79,12 +76,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | --- | --- | --- | --- |
 | XBV-404 | V5 | 4.4 worker | A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
 
-### S4 - documentation (2)
+### S4 - documentation (1)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-403 | V5 | 4.4 worker | A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
-| XBV-400 | V4 | 4.4 worker | The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER_LEARNING_MODEL). No product code sends a snapshot to the worker today. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -301,6 +297,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-316 (closed): Generated C names that are not unique within their first 63 characters (C99 5.2.4.1) for long model ids, identical on the base: SM_ST_<enum>_Entry / _Exit / _During when the state enum name is 63 char
 - XBV-317 (closed): The worker engine snapshot keeps block states but not the discrete hit indices (hitIndex / nextTick): a run 0..2 resumed 2..4 from the snapshot repeats the hit at t = 2 (discrete integrator 10 instead
 - XBV-318 (closed): Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier.
+- XBV-405 (closed): The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOM
+- XBV-406 (closed): The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found
+- XBV-407 (closed): BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so o
+- XBV-400 (closed): The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, 
 
 ## Decisions
 
