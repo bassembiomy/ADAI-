@@ -1,6 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
 import { XModel, XBlock, ModelDiagnostic, SolverOptions, BlockEvalContext } from './types';
-import { BLOCK_LIBRARY, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
+import { BLOCK_LIBRARY, timeEventDistance, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
 import { evaluateParameter } from './parameterEvaluation';
@@ -1025,6 +1025,19 @@ export class XbridgesEngine {
       }
     }
     return zcValues;
+  }
+
+  /** Longest step from `time` that stays inside one monotone segment of every time-based event source (null: unbounded). */
+  public maxStepToNextEvent(time: number): number | null {
+    let best: number | null = null;
+    for (const block of this.executionOrder) {
+      if (!block.ZeroCrossingFn) continue;
+      try {
+        const d = timeEventDistance(block.type, block.params, time);
+        if (d !== null && Number.isFinite(d) && d > 0 && (best === null || d < best)) best = d;
+      } catch (err) { /* a block with invalid parameters reports its own error when it executes */ }
+    }
+    return best;
   }
 
   public hasZeroCrossingSignChange(zcPrev: Map<string, number[]>, zcCurr: Map<string, number[]>): boolean {

@@ -34,15 +34,15 @@ export function chatterMessage(engine: XbridgesEngine, blockId: string | null, t
 
 /**
  * Counts consecutive zero crossings as Simulink does: a crossing is consecutive only when its time lies within a tiny
- * window of the previous one (the resolution of the event location, hMin, rounding of t); otherwise the count restarts.
+ * window of the previous one (the resolution of the event location and rounding of t; never the user's minimum step); otherwise the count restarts.
  * A model with many genuine, well separated events (PWM at 20 kHz) therefore never reaches the limit.
  */
 export class ConsecutiveCrossings {
   private last = Number.NaN;
   private count = 0;
   /** Registers a crossing located at `tEvent`; returns true when the limit is exceeded. */
-  note(tEvent: number, hMin: number, locationTol: number): boolean {
-    const window = Math.max(10 * hMin, 128 * Number.EPSILON * Math.abs(tEvent), 10 * locationTol);
+  note(tEvent: number, locationTol: number): boolean {
+    const window = Math.max(128 * Number.EPSILON * Math.abs(tEvent), 10 * locationTol);
     this.count = Number.isFinite(this.last) && Math.abs(tEvent - this.last) <= window ? this.count + 1 : 1;
     this.last = tEvent;
     return this.count > MAX_CONSECUTIVE_ZERO_CROSSINGS;

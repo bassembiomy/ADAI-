@@ -224,8 +224,26 @@ export class AdaptiveSolver {
       const remaining = t === t0 && target === tEnd && cfg.span !== undefined ? cfg.span : target - t;
       let hTry = h;
       let reachesTarget = false;
-      if (hTry >= remaining - cfg.hMin) { hTry = remaining; reachesTarget = true; }
-      if (!reachesTarget && hTry < cfg.hMin) hTry = cfg.hMin;
+      // Never step across a turning point of a time-based event source (PWM carrier): a step then holds at most one
+      // crossing, so no pulse is skipped. Events closer than the minimum step cannot be resolved (minimum-step violation).
+      let hBound = hasZc && !sliver ? engine.maxStepToNextEvent(t) : null;
+      if (hBound !== null && hBound >= remaining) hBound = null;
+      if (hBound !== null && hBound < cfg.hMin) {
+        // A short remainder before a turning point is simply landed on; a segment itself shorter than the minimum step
+        // (probe just behind the turning point) is a minimum-step violation.
+        const next = engine.maxStepToNextEvent(t + hBound + 0.5 * cfg.hMin);
+        if (next !== null && next < cfg.hMin) {
+          reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL',
+            `Variable-step solver: events are spaced ${next} s apart at t = ${t}, closer than the minimum step ${cfg.hMin}; the requested accuracy cannot be met.`);
+          return { ok: false, hNext: h };
+        }
+      }
+      const bounded = hBound !== null;
+      if (bounded) {
+        if (hTry >= hBound! - Math.min(cfg.hMin, 0.05 * hBound!)) hTry = hBound!; else hTry = Math.min(hTry, hBound!);
+      }
+      if (!bounded && hTry >= remaining - cfg.hMin) { hTry = remaining; reachesTarget = true; }
+      if (!reachesTarget && !bounded && hTry < cfg.hMin) hTry = cfg.hMin;
 
       if (cfg.batch) {
         // Discrete states are updated at major time step t; a change invalidates the reused first stage.
@@ -293,7 +311,7 @@ export class AdaptiveSolver {
         const zcCurr = engine.getZeroCrossings(t + hTry, tr.candidate);
         if (engine.hasZeroCrossingSignChange(zcBase, zcCurr)) {
           const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
-          if (crossings.note(located.tHigh, cfg.hMin, EVENT_TIME_TOL)) {
+          if (crossings.note(located.tHigh, EVENT_TIME_TOL)) {
             reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver'));
             return { ok: false, hNext: h };
           }
