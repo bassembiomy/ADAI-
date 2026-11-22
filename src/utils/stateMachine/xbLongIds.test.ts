@@ -58,10 +58,13 @@ describe('XBV-308: long ids keep simulator = C traces', () => {
   for (const [label, G, D, ST] of [
     ['long block ids', 'g' + 'L'.repeat(80), 'd' + 'Q'.repeat(70) + 'Mixed', 'A'],
     ['long state id', 'g', 'd', 'Ctrl_' + 'Xy'.repeat(40)],
+    ['long state id with a Step (state-timer index)', 'g', 'd', 'Step_' + 'Xy'.repeat(40)],
   ] as const) {
     it(`${label}: no difference between the simulator and the compiled C trace`, () => {
+      const step = label.includes('Step');
       const a = asXbOwner(smState(ST, { autostart: true }), {
-        nodes: [xbNode(G, 'GAIN', { gain: 2 }, ['u'], ['y']), xbNode(D, 'UNIT_DELAY', { initialCondition: 5 }, ['u'], ['y'])],
+        nodes: [xbNode(G, 'GAIN', { gain: 2 }, ['u'], ['y']), xbNode(D, 'UNIT_DELAY', { initialCondition: 5 }, ['u'], ['y']),
+          ...(step ? [xbNode('st', 'Step', { step_time: 0.25, initial_value: 0, final_value: 1 }, [], ['out'])] : [])],
         edges: [xbEdge(`${G}.y`, `${D}.u`)],
         mappings: [xbMap('u', `${G}.u`, 'in'), xbMap('y', `${D}.y`, 'out')],
       });
