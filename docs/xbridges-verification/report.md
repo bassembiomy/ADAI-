@@ -4,12 +4,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 21 done of 29; 2 in progress; 6 to do.
-- Findings: 0 open, 213 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 0 open
+- Work packages: 22 done of 29; 2 in progress; 5 to do.
+- Findings: 7 open, 213 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 4 open
   - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 0 open
-  - S4 (documentation): 0 open
+  - S3 (diagnostic, UI or convention deviation): 1 open
+  - S4 (documentation): 2 open
 - Decisions recorded: 17; open: 0.
 
 ## Work packages
@@ -34,7 +34,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-13 | Engine semantics | done | S / F |
 | WP-13b | Engine part B: algTol/maxIter, more rate ratios, zero crossings for D2 blocks once XBV-036 is fixed, DOE evaluator diagnostic codes (src/engine/doe) | todo | S / F |
 | WP-14 | Worker parity and protocol | done | S / F |
-| WP-14b | Worker part B: snapshot round trip of every stateful block through the real client (ROBOT_VACUUM_COMM), cancel mid-batch, hybrid blocks with gear-shift stimulus after XBV-047, full node params and accumulated time in the parity reference | todo | S / F |
+| WP-14b | Worker part B: snapshot round trip of every stateful block through the real client (ROBOT_VACUUM_COMM), cancel mid-batch, hybrid blocks with gear-shift stimulus after XBV-047, full node params and accumulated time in the parity reference | done | S / F |
 | WP-15 | Simulink goldens | todo | M+H / F |
 | WP-16 | Canvas / interpreter parity and model corpus | done | S (harness + tests from controller spec, D7) / F (Opus, D8) |
 | WP-17 | Per-block code parity, registry closure, compile matrix, limits | done | S (harness + tests from controller spec, D7) / F (Opus, D8) |
@@ -63,6 +63,28 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 290 blocks. Per-block gate values are in the ledger; most V2-V8 cells are still 'todo' at block level because the family WPs record their evidence per finding and per test file, not per block (WP-23 final pass).
 
 ## Open findings by severity
+
+### S1 - wrong number in simulation or generated C (4)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-405 | V6 | 4.4 worker | The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOMATED_MANUAL_TRANSMISSION, PT_DUAL_CLUTCH_TRANSMISSION and PT_DISC_CLUTCH differ from the main thread from step 0 (the clutch never locks). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-406 | V5 | 4.4 worker | The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-407 | V6 | 4.4 worker | BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so output limits and reset are ignored (limited x 1.0 instead of 0.2). The main-thread canvas looks types up exactly and is not affected. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-408 | V5 | 4.4 worker | The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSolver.locateEvent (~216) and StiffSolver (~532) have no cap on events or steps; Simulink stops with an error after the consecutive zero-crossings limit. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+
+### S3 - diagnostic, UI or convention deviation (1)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-404 | V5 | 4.4 worker | A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+
+### S4 - documentation (2)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-403 | V5 | 4.4 worker | A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
+| XBV-400 | V4 | 4.4 worker | The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER_LEARNING_MODEL). No product code sends a snapshot to the worker today. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier. |
 
 ## Closed, merged or superseded findings
 

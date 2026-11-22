@@ -481,7 +481,12 @@
    "deps": [
     "WP-14"
    ],
-   "status": "todo"
+   "status": "done",
+   "verification": {
+    "executor": "Sonnet harness xbWorkerB.test.ts (112 stateful types x 4 resume variants, cancel / fault, hybrid shift parity, full params at t = 1e6), rework 1 after verifier FAIL (XBV-401 / 402 were not defects; XBV-406 cause corrected; XBV-408 added)",
+    "verifier": "Opus PASS (20 passed, 23 expected fail, twice; full suite 4126/4126)",
+    "coverage_gaps": "PT_CONTROL_VOLUME and 17 other stateful blocks do not move under the scalar stimulus; 14 types fault on defaults and are skipped in part 4 (FAR_SKIPPED in the test)."
+   }
   },
   {
    "id": "WP-15",
@@ -2598,6 +2603,62 @@
    "status": "closed",
    "summary": "Generic HIL hal_drivers.c: clang -Werror reports 4 unused static functions (HAL_UART / HAL_SPI helpers); gcc accepts it. Pre-existing on the base. Found by the WP-21 U4 verifier.",
    "fix": "WP-21: the Generic HIL package emits its UART/SPI channel helpers, input / output simulation arrays and pin helper only when a channel uses them; 14 channel configurations compile and link with gcc and clang -std=c99 -Wall -Wextra -Werror; all other targets byte-identical."
+  },
+  {
+   "id": "XBV-405",
+   "plan_ref": "4.4 worker",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "The worker never runs hybrid discrete updates: the client strips updateDiscrete (XBV-047) and the XbridgesEngine constructor re-creates only execute / evaluateDerivatives / ZeroCrossingFn, so PT_AUTOMATED_MANUAL_TRANSMISSION, PT_DUAL_CLUTCH_TRANSMISSION and PT_DISC_CLUTCH differ from the main thread from step 0 (the clutch never locks). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-406",
+   "plan_ref": "4.4 worker",
+   "severity": "S1",
+   "gate": "V5",
+   "status": "open",
+   "summary": "The worker hangs on AMT / DCT under ode23 and ode23tb and on PT_DISC_CLUTCH under ode23tb (canvas freezes); a consequence of XBV-405 only (with updateDiscrete the same models finish in < 60 ms). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-407",
+   "plan_ref": "4.4 worker",
+   "severity": "S1",
+   "gate": "V6",
+   "status": "open",
+   "summary": "BLOCK_LIBRARY keys 'Integrator' and 'INTEGRATOR' differ only in case; the engine's case-insensitive rebuild (XbridgesEngine.ts ~140) gives the worker Integrator's execute for an INTEGRATOR block, so output limits and reset are ignored (limited x 1.0 instead of 0.2). The main-thread canvas looks types up exactly and is not affected. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-408",
+   "plan_ref": "4.4 worker",
+   "severity": "S1",
+   "gate": "V5",
+   "status": "open",
+   "summary": "The main thread hangs (killed at 20 s) on a chattering sliding mode under ode23, ode45 and ode23tb: Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator; rk4 finishes in 5 ms. AdaptiveSolver.locateEvent (~216) and StiffSolver (~532) have no cap on events or steps; Simulink stops with an error after the consecutive zero-crossings limit. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-404",
+   "plan_ref": "4.4 worker",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-403",
+   "plan_ref": "4.4 worker",
+   "severity": "S4",
+   "gate": "V5",
+   "status": "open",
+   "summary": "A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
+  },
+  {
+   "id": "XBV-400",
+   "plan_ref": "4.4 worker",
+   "severity": "S4",
+   "gate": "V4",
+   "status": "open",
+   "summary": "The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, AIR_FRYER_LEARNING_MODEL). No product code sends a snapshot to the worker today. Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier."
   }
  ],
  "blocks": {
