@@ -2531,24 +2531,27 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S4",
    "gate": "U13",
-   "status": "open",
-   "summary": "XbridgesEngine.compile first-hit margin n0 = ceil(start/Ts - 1e-6) is below the ulp of start/Ts from about 1e11 ticks (start 1.8e7 s at Ts 1e-4, 1.3e8 s at Ts 1e-3): the first hit at an on-grid start is skipped in 0.8-7% of random starts. Suggested margin max(1e-6, 64 eps |start/Ts|). Found by the WP-21 E6 verifier."
+   "status": "closed",
+   "summary": "XbridgesEngine.compile first-hit margin n0 = ceil(start/Ts - 1e-6) is below the ulp of start/Ts from about 1e11 ticks (start 1.8e7 s at Ts 1e-4, 1.3e8 s at Ts 1e-3): the first hit at an on-grid start is skipped in 0.8-7% of random starts. Suggested margin max(1e-6, 64 eps |start/Ts|). Found by the WP-21 E6 verifier.",
+   "fix": "WP-21 batch E7: first-hit margin max(1e-6, 64 eps |start/Ts|) ticks; 0 misses from 1e9 to 1e13 ticks."
   },
   {
    "id": "XBV-312",
    "plan_ref": "4.1 universal battery",
    "severity": "S3",
    "gate": "U13",
-   "status": "open",
-   "summary": "Scope sampleTime decimation compares time - lastSampleTime with an absolute 1e-9 (BlockDefinitions.ts ~3107): at start 1e8 s, h 0.01, Ts 0.1 it logs 12000 of 20000 samples (0.2 s gaps); clean at 0, 1e6, 1e7 s. Needs the integer-index grid of XBV-307. Found by the WP-21 E6 verifier."
+   "status": "closed",
+   "summary": "Scope sampleTime decimation compares time - lastSampleTime with an absolute 1e-9 (BlockDefinitions.ts ~3107): at start 1e8 s, h 0.01, Ts 0.1 it logs 12000 of 20000 samples (0.2 s gaps); clean at 0, 1e6, 1e7 s. Needs the integer-index grid of XBV-307. Found by the WP-21 E6 verifier.",
+   "fix": "WP-21 batch E7: Scope sample-time logging on the integer-index grid (sample n at the first time >= n*Ts, tolerance 1e-9 + 64 eps |t|); start-0 logs unchanged."
   },
   {
    "id": "XBV-313",
    "plan_ref": "4.1 universal battery",
    "severity": "S4",
    "gate": "U13",
-   "status": "open",
-   "summary": "PWM carrier phase += dt*f (BlockDefinitions.ts ~447) accumulates a bounded error (5e-12 after 1e6 steps from 0, 3.6e-8 at 1e8 s); a duty exactly equal to the carrier value (e.g. 0.3) can flip the gate on a tie. Derive the phase from t (frac(f t + phase0)). Found by the WP-21 E6 verifier."
+   "status": "closed",
+   "summary": "PWM carrier phase += dt*f (BlockDefinitions.ts ~447) accumulates a bounded error (5e-12 after 1e6 steps from 0, 3.6e-8 at 1e8 s); a duty exactly equal to the carrier value (e.g. 0.3) can flip the gate on a tie. Derive the phase from t (frac(f t + phase0)). Found by the WP-21 E6 verifier.",
+   "fix": "WP-21 batch E7: the PWM / three-phase PWM / SVPWM carrier phase is a function of time: on the solver grid frac(frac(f*start) + i*(f*h)) from the integer tick with error-free (Dekker) products, off grid frac(f*t) of the exact product; ties decided at 1e-12 cycles (documented). 0 non-tie edge differences versus an exact BigInt oracle; invalid frequency is a block error instead of a silent 50 Hz."
   },
   {
    "id": "XBV-314",

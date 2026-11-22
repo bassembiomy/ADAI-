@@ -221,3 +221,19 @@ describe('XBV-300: membership functions are element-wise; Clarke guards every in
     });
   }
 });
+
+// XBV-313 rework (E7 verifier): the carrier phase must be exact to well below one step for small steps at large times.
+// From a start that is a whole number of carrier periods, the gate sequence equals the one from start 0 for non-tie duties.
+describe('XBV-313: PWM gates at start 1e8 s with small steps', () => {
+  for (const [f, h] of [[20000, 1e-6], [2500, 2e-6], [20000, 1 / 30000], [1000, 1e-6]] as const) {
+    it(`f ${f} Hz, step ${h.toPrecision(4)}, duty 0.37: gates from start 1e8 s equal gates from start 0`, () => {
+      const gates = (T0: number) => runModel(buildModel({
+        blocks: [{ id: 'c', type: 'Constant', params: { value: 0.37 } }, { id: 'p', type: 'PWM_GENERATOR', params: { frequency: f, carrierType: 'triangle' } }],
+        wires: ['c.out -> p.duty'],
+      }), { solver: 'discrete', dt: h, startTime: T0, stopTime: T0 + 3000 * h, probes: ['p.pwm'] }).signals['p.pwm'].map(Number);
+      const a = gates(0), b = gates(1e8);
+      const diff = a.reduce((n, v, i) => n + (v !== b[i] ? 1 : 0), 0);
+      expect(diff).toBe(0);
+    }, 60_000);
+  }
+});
