@@ -129,10 +129,15 @@ function getSTM32F1UARTConfig(pin: string) {
  * Generic simulation storage and pin index helper. Only the GPIO, ADC, DAC and PWM
  * snippets reference them, so the HIL generator emits them only when such a channel exists.
  */
-export const GENERIC_SIMULATION_ARRAYS = `/* Generic software simulations */
-static int simulated_inputs[100] = {0};
-static int simulated_outputs[100] = {0};
+export const GENERIC_SIM_HEADER = `/* Generic software simulations */
 `;
+// simulated_inputs is read by GPIO In and ADC channels only.
+export const GENERIC_SIM_INPUTS = `static int simulated_inputs[100] = {0};
+`;
+// simulated_outputs is written by GPIO Out, DAC and PWM channels only.
+export const GENERIC_SIM_OUTPUTS = `static int simulated_outputs[100] = {0};
+`;
+export const GENERIC_SIMULATION_ARRAYS = GENERIC_SIM_HEADER + GENERIC_SIM_INPUTS + GENERIC_SIM_OUTPUTS;
 
 // Always emitted for the Generic target: serialReceive uses rx_buffer.
 export const GENERIC_RX_STATE = `char rx_buffer[256];

@@ -1,6 +1,6 @@
 import { HILConfig } from './hilTypes';
 import { cDataMemberName } from '../../utils/stateMachine/smCIdentifierPolicy';
-import { hilDriverTemplates, GENERIC_SIMULATION_ARRAYS, GENERIC_PIN_INDEX_HELPER } from './hilDriverTemplates';
+import { hilDriverTemplates, GENERIC_SIM_HEADER, GENERIC_SIM_INPUTS, GENERIC_SIM_OUTPUTS, GENERIC_PIN_INDEX_HELPER } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
 import { validatePinAssignments } from './pinValidator';
@@ -16,16 +16,19 @@ const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
 function pruneGenericGlobals(
   globals: string,
   usedHelpers: Record<string, boolean>,
-  simulationUsed: boolean
+  inputsUsed: boolean,
+  outputsUsed: boolean
 ): string {
-  const withoutUnusedHelpers = globals.replace(
+  let out = globals.replace(
     /static inline [^\n]*?\b(HAL_(?:UART|SPI)_(?:Read|Write)Channel)\([^)]*\) \{\n[\s\S]*?\n\}\n?/g,
     (block: string, name: string) => (usedHelpers[name] ? block : '')
   );
-  if (simulationUsed) return withoutUnusedHelpers;
-  return withoutUnusedHelpers
-    .replace(GENERIC_SIMULATION_ARRAYS, '')
-    .replace(GENERIC_PIN_INDEX_HELPER, '');
+  if (!inputsUsed) out = out.replace(GENERIC_SIM_INPUTS, '');
+  if (!outputsUsed) out = out.replace(GENERIC_SIM_OUTPUTS, '');
+  if (!inputsUsed && !outputsUsed) {
+    out = out.replace(GENERIC_SIM_HEADER, '').replace(GENERIC_PIN_INDEX_HELPER, '');
+  }
+  return out;
 }
 
 export function generateHALCode(
@@ -170,7 +173,7 @@ ${target === 'Generic' ? pruneGenericGlobals(mcu.globals, {
   HAL_UART_WriteChannel: uartWriteChannels.length > 0,
   HAL_SPI_ReadChannel: spiReadChannels.length > 0,
   HAL_SPI_WriteChannel: spiWriteChannels.length > 0,
-}, config.channels.some(ch => ['GPIO', 'ADC', 'DAC', 'PWM'].includes(ch.peripheral))) : mcu.globals}
+}, gpioReadChannels.length > 0 || adcChannels.length > 0, gpioWriteChannels.length > 0 || dacChannels.length > 0 || pwmChannels.length > 0) : mcu.globals}
 
 void HAL_Drivers_Init(void) {
     ${mcu.systemInit.trim()}
