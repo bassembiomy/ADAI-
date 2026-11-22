@@ -2451,16 +2451,18 @@
    "plan_ref": "4.1 universal battery",
    "severity": "S2",
    "gate": "U6",
-   "status": "open",
-   "summary": "44 blocks (CLARKE/PARK/INVERSE_* transforms, AC_MOTOR_PID_CONTROL, FIELD_ORIENTED_CONTROL, FUZZY_MF_GAUSSMF/SIGMF, ROBOT_VACUUM_*, DEM_BOND_FABRIC, LMS/NEURAL, SVPWM_CORE, ...) coerce a vector, matrix or ragged input with Number() and output NaN with only the generic NUMERICAL_INSTABILITY warning (858 type.port:shape cases); Simulink computes element-wise or reports a dimension error. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "44 blocks (CLARKE/PARK/INVERSE_* transforms, AC_MOTOR_PID_CONTROL, FIELD_ORIENTED_CONTROL, FUZZY_MF_GAUSSMF/SIGMF, ROBOT_VACUUM_*, DEM_BOND_FABRIC, LMS/NEURAL, SVPWM_CORE, ...) coerce a vector, matrix or ragged input with Number() and output NaN with only the generic NUMERICAL_INSTABILITY warning (858 type.port:shape cases); Simulink computes element-wise or reports a dimension error. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U2: FUZZY_MF_GAUSSMF / SIGMF are element-wise (Fuzzy Logic Toolbox); 42 blocks with fixed-meaning inputs (motor control, Clarke/Park and their inverses, robot vacuum, DEM, LMS/neural, SVPWM_CORE) refuse a wrong input shape with a block error naming the port and the expected shape (FIXED_SHAPE_INPUTS, every fixed-meaning port declared). All 11 labs bit-identical; scalar results bit-identical on 46 types."
   },
   {
    "id": "XBV-302",
    "plan_ref": "4.1 universal battery",
    "severity": "S3",
    "gate": "U6",
-   "status": "open",
-   "summary": "Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier."
+   "status": "closed",
+   "summary": "Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier.",
+   "fix": "WP-21 batch U2: Determinant (non-square, vector, ragged) and Transpose (ragged) return a dimension block error instead of throwing; scalar and 1x1 stay valid for Determinant (MATLAB det)."
   },
   {
    "id": "XBV-303",

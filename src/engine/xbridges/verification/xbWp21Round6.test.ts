@@ -190,3 +190,34 @@ describe('D17: diagonal blocks follow MATLAB diag, no diagMode option', () => {
     expect(b.execute([[[1, 0], [0, 2]]] as never, b.params, b.state, 0).outputs[0]).toEqual([1, 2]);
   });
 });
+
+// XBV-300 (U2 rework): Fuzzy Logic Toolbox gaussmf / sigmf are element-wise: gaussmf(x; sigma 1, c 0) = exp(-x^2/2) at
+// x = [0 1 2] is [1 0.606531 0.135335]; sigmf(x; a 2, c 0) = 1/(1+e^(-2x)) at x = 1 is 0.880797. CLARKE_TRANSFORM refuses a
+// vector on every phase input, including ic in power_invariant mode (a dimension diagnostic, never NaN without one).
+import { BLOCK_LIBRARY as BL_U2 } from '../BlockDefinitions';
+describe('XBV-300: membership functions are element-wise; Clarke guards every input', () => {
+  const ex = (type: string, params: Record<string, unknown>, ins: unknown[]) => {
+    const b = BL_U2[type]('b', params);
+    return b.execute(ins as never, b.params, b.state, 0) as { outputs: unknown[]; error?: string };
+  };
+  it('FUZZY_MF_GAUSSMF on [0 1 2] gives [1 0.606531 0.135335]', () => {
+    const r = ex('FUZZY_MF_GAUSSMF', { sigma: 1, c: 0 }, [[0, 1, 2]]);
+    expect(r.error).toBeUndefined();
+    (r.outputs[0] as number[]).forEach((v, i) => expect(v).toBeCloseTo([1, Math.exp(-0.5), Math.exp(-2)][i], 12));
+  });
+  it('FUZZY_MF_SIGMF on [[1 0] [-1 1]] gives 1/(1+e^(-2x)) element-wise', () => {
+    const r = ex('FUZZY_MF_SIGMF', { a: 2, c: 0 }, [[[1, 0], [-1, 1]]]);
+    expect(r.error).toBeUndefined();
+    const s = (x: number) => 1 / (1 + Math.exp(-2 * x));
+    expect(r.outputs[0]).toEqual([[s(1), s(0)], [s(-1), s(1)]]);
+  });
+  for (const mode of ['amplitude_invariant', 'power_invariant']) {
+    it(`CLARKE_TRANSFORM (${mode}) with a vector on ic: a block error naming ic`, () => {
+      const r = runModel(buildModel({
+        blocks: [{ id: 'v', type: 'Constant', params: { value: [1, 2, 3] } }, { id: 's', type: 'Constant', params: { value: 1 } }, { id: 'c', type: 'CLARKE_TRANSFORM', params: { mode } }],
+        wires: ['s.out -> c.ia', 's.out -> c.ib', 'v.out -> c.ic'],
+      }), { solver: 'discrete', dt: 0.01, stopTime: 0.01, probes: [] });
+      expect(r.diagnostics.some((d) => d.severity === 'error' && /ic/.test(d.message))).toBe(true);
+    });
+  }
+});

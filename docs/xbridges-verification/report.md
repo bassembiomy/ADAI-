@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 21 done of 29; 2 in progress; 6 to do.
-- Findings: 8 open, 202 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 6 open, 204 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 1 open
-  - S3 (diagnostic, UI or convention deviation): 4 open
+  - S2 (crash, stop, freeze or silent no-op): 0 open
+  - S3 (diagnostic, UI or convention deviation): 3 open
   - S4 (documentation): 3 open
 - Decisions recorded: 17; open: 0.
 
@@ -64,17 +64,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S2 - crash, stop, freeze or silent no-op (1)
+### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-300 | U6 | 4.1 universal battery | 44 blocks (CLARKE/PARK/INVERSE_* transforms, AC_MOTOR_PID_CONTROL, FIELD_ORIENTED_CONTROL, FUZZY_MF_GAUSSMF/SIGMF, ROBOT_VACUUM_*, DEM_BOND_FABRIC, LMS/NEURAL, SVPWM_CORE, ...) coerce a vector, matrix or ragged input with Number() and output NaN with only the generic NUMERICAL_INSTABILITY warning (858 type.port:shape cases); Simulink computes element-wise or reports a dimension error. Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
-
-### S3 - diagnostic, UI or convention deviation (4)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-302 | U6 | 4.1 universal battery | Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtures/xbridges/universal-gaps-b.json), reproduced by the verifier. |
 | XBV-312 | U13 | 4.1 universal battery | Scope sampleTime decimation compares time - lastSampleTime with an absolute 1e-9 (BlockDefinitions.ts ~3107): at start 1e8 s, h 0.01, Ts 0.1 it logs 12000 of 20000 samples (0.2 s gaps); clean at 0, 1e6, 1e7 s. Needs the integer-index grid of XBV-307. Found by the WP-21 E6 verifier. |
 | XBV-314 | V4 | 4.1 universal battery | A Scope with sampleTime 0.1 over [0, 2] logs 20 samples; Simulink logs 21 (both endpoints, t = 2 included). Same on the base. Found by the WP-21 E7 verifier. |
 | XBV-315 | V3 | 4.3 parameters | The 'positive' parameter kind rejects 0, negatives, NaN, text and empty at compile time but accepts Infinity, which then fails only at run time (for example PWM frequency). 'positive' (and 'nonnegative') must reject non-finite values with a PARAMETER_* diagnostic. Found by the WP-21 E7 verifier. |
@@ -285,6 +278,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-195 (closed): src/utils/stateMachine smDifferential: the state-timer Step value is [0,2,2,2] where [0,2,2,5] is expected (not an environment issue; fails on the base too). Found by the WP-21 XBV-193 verifier; root 
 - XBV-196 (closed): An empty RATE_LIMITER slew rate [] / '[]' is refused by the embedded validator with the 'vector slew rates' message although it has no elements (the base silently ran it at rate 1); the message should
 - XBV-197 (closed): RATE_LIMITER legacy aliases risingLimit / fallingLimit set to '' pass the embedded validator as Number('') = 0, while the readers fall back to the default 1 (interpreter = C, so no parity gap); an emp
+- XBV-300 (closed): 44 blocks (CLARKE/PARK/INVERSE_* transforms, AC_MOTOR_PID_CONTROL, FIELD_ORIENTED_CONTROL, FUZZY_MF_GAUSSMF/SIGMF, ROBOT_VACUUM_*, DEM_BOND_FABRIC, LMS/NEURAL, SVPWM_CORE, ...) coerce a vector, matrix
+- XBV-302 (closed): Determinant throws for non-square / vector / 1xn / nx1 / ragged input and Transpose for ragged input, instead of a dimension diagnostic (BlockDefinitions.ts / VectorUtils.ts). Found by WP-03b (xbUnive
 - XBV-303 (closed): parameterSchema lists representation continuous\|discrete for TRANSFER_FUNCTION, ZERO_POLE_GAIN, LAPLACE_TRANSFORM and DISCRETE_TRANSFER_FUNCTION; the factories fix the domain (as Simulink's separate 
 - XBV-305 (closed): FLUX_REFERENCE mode field_weakening gives the same output as constant (silent no-op; the code comment says not implemented, BlockDefinitions.ts ~3883). Found by WP-03b (xbUniversalB.test.ts, ratchet t
 - XBV-306 (closed): MatrixDiag, Diag, DiagExtract and ExtractDiag ignore diagMode create\|extract; VectorUtils.diag decides from the input shape (silent no-op). Found by WP-03b (xbUniversalB.test.ts, ratchet tests/fixtur
