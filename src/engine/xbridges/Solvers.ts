@@ -33,6 +33,7 @@ export class Solvers {
            nextStates.set(blockId, nextState);
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -108,6 +109,7 @@ export class Solvers {
           nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -184,6 +186,7 @@ export class Solvers {
           nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -272,6 +275,7 @@ export class Solvers {
         }
       });
 
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 
@@ -341,6 +345,7 @@ export class Solvers {
           nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
+      if (engine.hasFatalError()) return; // a faulted step commits nothing (XBV-403 / XBV-404)
       engine.commitStateUpdates(nextStates);
   }
 

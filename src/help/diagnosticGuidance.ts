@@ -106,7 +106,7 @@ export const XBRIDGES_SIMULATION_DIAGNOSTIC_GUIDANCE: Record<string, string> = {
   STIFF_SOLVER_INVALID_OPTION: 'Error: Ode14x needs integer extrapolationOrder and newtonIterations of at least 1 and a fixed step greater than 0; ode23tb needs relTol, absTol, maxStep and minStep greater than 0. Correct the option or the Fixed Step.',
   STIFF_SOLVER_NONFINITE: 'Error: A stiff solver (ode14x or ode23tb) met a non-finite derivative or state. The run stops. Check the model for divisions by zero or a diverging block, and reduce the step.',
   STIFF_SOLVER_SINGULAR: 'Error: The implicit step matrix (I - h*J) is singular, so the implicit step cannot be solved. Reduce the step size or check the model for an ill-defined state equation.',
-  STIFF_SOLVER_STEP_TOO_SMALL: 'Error: Ode23tb reduced its step below the minimum step (1e-12 unless set) and stopped. The model is too stiff or discontinuous for the tolerance; loosen the tolerance or smooth the discontinuity.',
+  STIFF_SOLVER_STEP_TOO_SMALL: 'Error: A variable-step solver reduced its step below the minimum step (1e-12 unless set), or needed more than the internal step limit, and stopped. The model is too stiff or discontinuous for the tolerance; loosen the tolerance or smooth the discontinuity.',
   STOP_TIME_BEFORE_START: 'Error: Stop Time is not a number or is less than Start Time. Enter a Stop Time greater than or equal to the Start Time, or inf.',
   STOP_TIME_INFINITE_BATCH: 'Error: A batch run needs a finite Stop Time; inf is only for the live canvas, which runs until stopped. Enter a finite Stop Time for a batch run.',
   SUM_SIGNS_INVALID: 'Error: The list of signs of a Sum block contains characters other than +, - and |, or its number of + and - signs differs from the number of inputs. Use only + and - (one per input) in the list of signs.',
@@ -158,6 +158,7 @@ export const XBRIDGES_EMBEDDED_DIAGNOSTIC_GUIDANCE: Record<string, string> = {
   XB_STEP_PARAM_INVALID: 'Error: A Step block parameter is not numeric. Enter numbers for step_time, initial_value and final_value.',
   XB_STEP_PARAM_MISSING: 'Error: A Step block lacks step_time, initial_value or final_value. Set all three parameters.',
   XB_TARGET_CAPABILITY_MISSING: 'Error: The block or port needs something the target lacks: an unsupported numeric type, a dimension above the target limit, or math-library support. Choose a supported numeric type, reduce the size, or select a target with the math library.',
+  ZERO_CROSSING_CHATTER: 'Error: The model crossed a discontinuity (Switch, Relay, Saturation, ...) more than 1000 times in a row without making progress, as a sliding mode does, so a variable-step solver (ode23, ode45, ode23tb) stopped. Use a fixed-step solver, or add hysteresis or a dead band to the named block.',
 };
 export function diagnosticReference(guidance: Record<string, string>): string {
   return Object.entries(guidance).map(([code, meaning]) => `• ${code}: ${meaning}`).join('\n\n');

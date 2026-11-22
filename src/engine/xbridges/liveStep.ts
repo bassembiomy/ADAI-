@@ -89,8 +89,13 @@ export function liveStep(engine: XbridgesEngine, solver: string, t: number, dt: 
     reportOnce(engine, 'STIFF_SOLVER_INVALID_OPTION', `Relative and absolute tolerance must be finite and > 0 (relTol = ${relTol}, absTol = ${absTol}).`);
     return false;
   }
+  // A faulted or failed step commits nothing (XBV-403 / XBV-404): the step-start states are restored, so the engine is
+  // at the reported time. (States are replaced, not mutated, by the solvers' commits, so the references suffice.)
+  const start = engine.executionOrder.map(b => [b, b.state] as const);
   const ok = LIVE_STEPPERS[canonical](engine, t, dt, relTol, absTol);
-  return ok && !engine.hasFatalError();
+  const good = ok && !engine.hasFatalError();
+  if (!good) for (const [b, state] of start) b.state = state;
+  return good;
 }
 
 /**

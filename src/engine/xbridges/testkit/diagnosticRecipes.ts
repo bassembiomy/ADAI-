@@ -130,6 +130,10 @@ const pid = (N: number): ModelSpec => ({
   blocks: [konst('k', 1), { id: 'p', type: 'PID_CONTROLLER', params: { mode: 'PID', N } }, term('t')],
   wires: ['k.out -> p.r', 'p.u -> t.u'],
 });
+const slidingMode = (): ModelSpec => ({
+  blocks: [{ id: 'x', type: 'Integrator', params: { initialCondition: 0.0123 } }, konst('a', -1), konst('b', 1), { id: 's', type: 'SWITCH', params: { threshold: 0, criteria: '>=' } }],
+  wires: ['a.out -> s.u1', 'b.out -> s.u2', 'x.out -> s.ctrl', 's.y -> x.in'],
+});
 const STIFF14: SolverOptions = { solver: 'ode14x', fixedStep: 0.25, startTime: 0, stopTime: 1 };
 const TB: SolverOptions = { solver: 'ode23tb', startTime: 0, stopTime: 10 };
 /** Integrator whose input is its own output through a Gain: x' = gain * x. */
@@ -407,5 +411,10 @@ export const DIAGNOSTIC_RECIPES: Record<string, DiagnosticRecipe> = {
     note: 'Batch ode23tb with minStep 1 above the first step (a solver option, not editable on the canvas): StiffSolver.ts:419 via runODE23TB',
     provoke: () => batch(integratorChain(), { ...TB, minStep: 1 }, TB),
     clean: () => batch(integratorChain(), TB, TB),
+  },
+  ZERO_CROSSING_CHATTER: {
+    note: 'Batch ode23 on Integrator (IC 0.0123) -> SWITCH (x >= 0 ? -1 : +1) -> Integrator, a chattering sliding mode: zeroCrossingGuard.ts (1000 consecutive crossings); clean Integrator chain; planned steps from rk4 h = 1e-4',
+    provoke: () => batch(slidingMode(), { solver: 'ode23', startTime: 0, stopTime: 1 }, { solver: 'rk4', fixedStep: 1e-4, startTime: 0, stopTime: 1 }),
+    clean: () => batch(integratorChain(), { solver: 'ode23', startTime: 0, stopTime: 1 }, { solver: 'ode23', startTime: 0, stopTime: 1 }),
   },
 };

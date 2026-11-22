@@ -2,6 +2,7 @@
 // Stiff solvers for X-Bridges: ode14x (fixed-step implicit extrapolation) and ode23tb (variable-step TR-BDF2).
 // The continuous state of every block with evaluateDerivatives is flattened into one Float64Array so that the
 // Jacobian is global (it couples blocks), as in Simulink.
+import { MAX_CONSECUTIVE_ZERO_CROSSINGS, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, crossingBlock, reportChatter, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -127,6 +128,14 @@ function reportError(engine: XbridgesEngine, code: string, message: string) {
 }
 
 export class StiffSolver {
+  /** The block whose zero-crossing function changes sign over [t, t + h] (for the chatter diagnostic). */
+  private static chatterBlock(engine: XbridgesEngine, t: number, h: number, statesPrev: Map<string, any>, statesCurr: Map<string, any>): string | null {
+    engine.computeOutputs(t, statesPrev);
+    const zcPrev = engine.getZeroCrossings(t, statesPrev);
+    engine.computeOutputs(t + h, statesCurr);
+    return crossingBlock(zcPrev, engine.getZeroCrossings(t + h, statesCurr));
+  }
+
   // ---------------------------------------------------------------- flatten / unflatten
 
   static buildLayout(engine: XbridgesEngine): Layout {
@@ -529,7 +538,10 @@ export class StiffSolver {
     let tc = t;
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     let eventStep = false;
+    let zcRun = 0; // consecutive zero crossings without a regular step in between (XBV-408)
+    let passes = 0;
     while (tc < tEnd && !engine.hasFatalError()) {
+      if (++passes > MAX_INTERNAL_STEPS_LIVE) { reportStepBudget(engine, MAX_INTERNAL_STEPS_LIVE, tc, 'ode23tb'); return false; }
       const remaining = tc === t ? dt : tEnd - tc; // the first substep measures the output step itself, not (t + dt) - t
       let hTry = Math.min(h, hMax);
       let reaches = false;
@@ -542,9 +554,13 @@ export class StiffSolver {
         // the blocks then update their discrete state there (XBV-177).
         if (res.candidate !== undefined && !eventStep) {
           const hEv = eventStepLength(engine, tc, hTry, statesPrev, res.candidate, engine.options?.zeroTol ?? 1e-6, hMin);
-          if (hEv !== null) { engine.commitStateUpdates(statesPrev); h = hEv; eventStep = true; continue; }
+          if (hEv !== null) {
+            if (++zcRun > MAX_CONSECUTIVE_ZERO_CROSSINGS) { reportChatter(engine, StiffSolver.chatterBlock(engine, tc, hTry, statesPrev, res.candidate), tc, 'ode23tb'); return false; }
+            engine.commitStateUpdates(statesPrev); h = hEv; eventStep = true; continue;
+          }
         }
         if (res.accepted) {
+          if (!eventStep) zcRun = 0;
           eventStep = false;
           if (!reaches) { engine.computeOutputs(tc + hTry); engine.updateDiscreteStates(tc + hTry); }
         }
@@ -586,8 +602,11 @@ export class StiffSolver {
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     const zeroTol = options.zeroTol ?? 1e-6;
     let eventStep = false;
+    let zcRun = 0; // consecutive zero crossings without a regular step in between (XBV-408)
+    let passes = 0;
 
     while (stopTime - t > landTol && !engine.hasFatalError()) {
+      if (++passes > MAX_INTERNAL_STEPS_BATCH) { reportStepBudget(engine, MAX_INTERNAL_STEPS_BATCH, t, 'ode23tb'); break; }
       const remaining = stopTime - t;
       let hTry = Math.min(h, hMax, remaining);
       if (remaining - hTry < hMin) hTry = remaining <= hMax ? remaining : remaining / 2;
@@ -608,13 +627,14 @@ export class StiffSolver {
         if (res.candidate !== undefined && !eventStep) {
           const hEv = eventStepLength(engine, t, hTry, statesPrev, res.candidate, zeroTol, hMin);
           if (hEv !== null) {
+            if (++zcRun > MAX_CONSECUTIVE_ZERO_CROSSINGS) { reportChatter(engine, StiffSolver.chatterBlock(engine, t, hTry, statesPrev, res.candidate), t, 'ode23tb'); break; }
             engine.commitStateUpdates(statesPrev);
             h = hEv; // retake up to the event with the error test; shorter than the event, so it is not found again
             eventStep = true;
             continue;
           }
         }
-        if (res.accepted) eventStep = false;
+        if (res.accepted) { if (!eventStep) zcRun = 0; eventStep = false; }
       } else res = StiffSolver.stepODE23TB(engine, t, hTry, relTol, absTol);
       if (res.accepted) {
         t = hTry === remaining ? stopTime : t + hTry;
