@@ -433,27 +433,49 @@ const svpwmGateCompare = (ins: any[], p: any, time: number): { t: number; da: nu
   return { t, da, db, dc };
 };
 
-/** Carrier phase frac(f*t) from absolute time, exact when t is a whole number of periods: t is split as k/f + r. */
-const absCarrierPhase = (time: number, freq: number): number => {
-  const k = Math.floor(freq * time);
-  let r = time - k / freq;
-  // Large times: t itself carries an error of up to ulp(t)/2, so r is snapped to the decimal grid just above that error
-  // (a step on that grid keeps its exact phase, e.g. a duty tie); below 1e5 s the grid is finer than any step and unused.
-  const q = Math.pow(10, Math.ceil(Math.log10(64 * Number.EPSILON * Math.abs(time))));
-  if (q >= 1e-9) r = Math.round(r / q) * q;
-  // Round-off of f*r (about 1e-16) is removed at 1e-12 so that a duty tying with the carrier decides the same at any start.
-  const ph = Math.round(freq * r * 1e12) / 1e12;
-  const w = ph - Math.floor(ph);
+/** Error-free product: p + e = a * b exactly (Dekker / Veltkamp split). */
+const twoProduct = (a: number, b: number): [number, number] => {
+  const split = (x: number): [number, number] => { const c = 134217729 * x; const hi = c - (c - x); return [hi, x - hi]; };
+  const p = a * b;
+  const [ah, al] = split(a);
+  const [bh, bl] = split(b);
+  return [p, ((ah * bh - p) + ah * bl + al * bh) + al * bl];
+};
+/** frac(x) of the exact sum hi + lo, in [0, 1). */
+const fracOf = (hi: number, lo: number): number => {
+  let w = (hi - Math.floor(hi)) + lo;
+  w -= Math.floor(w);
+  return w >= 1 ? 0 : w;
+};
+/** Carrier phase frac(f*t + phase0) from absolute time. With the solver's time grid t = start + i*h (context.timeGrid) the
+ *  phase is frac(frac(f*start) + i*(f*h)) from the integer tick i, so it does not depend on the rounding of t (ulp(t)/2 is
+ *  1.5e-8 s at 1e8 s). Without a grid (minor steps, events, variable step) it is frac(f*t) of the exactly computed product.
+ *  The result is rounded at 1e-12 cycles: that bound (about 1e-12 / f seconds, well below a few f*ulp(t) for t < 1e8 s and
+ *  below any step) lets a duty that ties with the carrier decide the same at every start time. */
+const absCarrierPhase = (time: number, freq: number, grid?: { start: number; step: number }): number => {
+  let w: number;
+  const i = grid && grid.step > 0 && Number.isFinite(grid.step) ? Math.round((time - grid.start) / grid.step) : NaN;
+  if (grid && Number.isFinite(i) && i >= 0 && Math.abs(grid.start + i * grid.step - time) <= 4 * Number.EPSILON * Math.abs(time) + 1e-12 * grid.step) {
+    const [ph, pe] = twoProduct(freq, grid.start);
+    const [qh, qe] = twoProduct(freq, grid.step);
+    const [ih, ie] = twoProduct(i, qh);
+    w = fracOf(ph, pe);
+    w = fracOf(w + ih, ie + i * qe);
+  } else {
+    const [ph, pe] = twoProduct(freq, time);
+    w = fracOf(ph, pe);
+  }
+  w = Math.round(w * 1e12) / 1e12;
   return w >= 1 ? 0 : w;
 };
 
 /** PWM Generator: carrier phase accumulated from the committed state (pure; the caller commits the returned phase). */
-const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: number; carrier: number; phase: number } => {
+const pwmEvaluate = (ins: any[], p: any, state: any, time: number, ctx?: BlockEvalContext): { duty: number; carrier: number; phase: number } => {
   const freq = Number(p.frequency);
   const duty = Math.max(0, Math.min(1, Number(ins[0])));
   // An invalid frequency is a block error (never a silent default); the evaluation below never runs on it.
   if (!(Number.isFinite(freq) && freq > 0)) throw new Error(`PWM_GENERATOR: frequency must be a positive finite number, got ${String(p.frequency)}`);
-  const phase = absCarrierPhase(time, freq);
+  const phase = absCarrierPhase(time, freq, ctx?.timeGrid);
   let carrier: number;
   switch (p.carrierType) {
     case 'sawtooth': carrier = phase; break;
@@ -466,10 +488,10 @@ const pwmEvaluate = (ins: any[], p: any, state: any, time: number): { duty: numb
   return { duty, carrier, phase };
 };
 /** Three-phase PWM: normalized references and the carrier phase from the committed state (pure). */
-const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number): { refs: number[]; phase: number; carrier: number } => {
+const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number, ctx?: BlockEvalContext): { refs: number[]; phase: number; carrier: number } => {
   const freq = Number(p.frequency);
   if (!(Number.isFinite(freq) && freq > 0)) throw new Error(`THREE_PHASE_PWM: frequency must be a positive finite number, got ${String(p.frequency)}`);
-  const phase = absCarrierPhase(time, freq);
+  const phase = absCarrierPhase(time, freq, ctx?.timeGrid);
   let refs = ins.map(Number);
   if (p.method === 'Saddle' || p.method === 'SVPWM') {
     const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
@@ -3221,8 +3243,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('duty', 'Duty Cycle (0–1)', 'input', 0.5, 'left', 'continuous')],
     outputs: [createPort('pwm', 'PWM', 'output', 0, 'right', 'logical')],
     state: { phase: 0.0, lastTime: -1.0 },
-    execute: (ins, p, state, time) => {
-      const { duty, carrier, phase } = pwmEvaluate(ins, p, state, time);
+    execute: (ins, p, state, time, ctx) => {
+      const { duty, carrier, phase } = pwmEvaluate(ins, p, state, time, ctx);
       // The phase advances in nextState (applied once per major step); execute never changes its state.
       // Duty 1 means always on (the triangle carrier reaches 1 at its peak, where a strict comparison would switch off).
       return { outputs: [duty >= 1 || duty > carrier ? 1 : 0], nextState: { phase, lastTime: time } };
@@ -3250,8 +3272,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
     ],
     state: { phase: 0, lastTime: -1 },
-    execute: (ins, p, state, time) => {
-      const { refs, phase, carrier } = threePhasePwmEvaluate(ins, p, state, time);
+    execute: (ins, p, state, time, ctx) => {
+      const { refs, phase, carrier } = threePhasePwmEvaluate(ins, p, state, time, ctx);
       // A reference at or above +1 saturates on (the carrier peak equals 1).
       return { outputs: refs.map(ref => (ref >= 1 || ref > carrier ? 1 : 0)), nextState: { phase, lastTime: time } };
     },

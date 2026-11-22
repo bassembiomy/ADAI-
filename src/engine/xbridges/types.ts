@@ -39,6 +39,8 @@ export interface BlockEvalContext {
   minor: boolean;
   mode: any;
   setMode: (mode: any) => void;
+  /** Fixed-step time grid t = start + i*step of the run (absent for variable-step solvers). */
+  timeGrid?: { start: number; step: number };
 }
 
 export interface XBlock {
