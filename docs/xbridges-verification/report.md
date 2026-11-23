@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 24 done of 29; 2 in progress; 3 to do.
-- Findings: 5 open, 236 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 5 open, 238 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 3 open
-  - S4 (documentation): 2 open
+  - S3 (diagnostic, UI or convention deviation): 2 open
+  - S4 (documentation): 3 open
 - Decisions recorded: 19; open: 0.
 
 ## Work packages
@@ -64,20 +64,20 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S3 - diagnostic, UI or convention deviation (3)
+### S3 - diagnostic, UI or convention deviation (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. |
 | XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. |
-| XBV-421 | V4 | 5.2 engine | Algebraic loop convergence is judged on the residual (sweep change, Newton residual), not on the solution: y = c(t) + q y under rk4 misses algTol*(1+\|y\|) on the solution by about 1/(1-q): q = 0.9 6x, 0.99 100x, 0.9999 1e4x, 0.999999 (c = 1 + 0.1 t) error 0.167 relative; nonlinear y = c + y - 1e-6 y^2 250x; no diagnostic. Same before and after E11. Simulink iterates until the step is small. Found by the E11 verifier. |
 
-### S4 - documentation (2)
+### S4 - documentation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
-| XBV-422 | V4 | 5.2 engine | y = c + y - k y^2 with k = 1e-8 (solution 1e4) gives a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0: the Newton Jacobian 2 k y is 0 at the starting guess 0. Same before and after E11. Found by the E11 verifier. |
+| XBV-430 | V4 | 5.2 engine | The E12 isRoot guard multiplies the rounding term 64 eps max(\|z\|, \|F\|) by (1 + \|z\|), so its slack grows with \|z\|^2 and exceeds the algTol term above \|z\| ~ 7e7. No probe got through (a singular Jacobian never yields a reliable step), but the bound should be algTol (1 + \|z\|) + 64 eps max(\|z\|, \|F\|). Found by the E12 verifier. |
+| XBV-431 | V4 | 5.2 engine | Far roots are not reached from a zero start: y = 1 + y - k y^2 for k = 1e-14..1e-20 (roots 1e7..1e10), y = 1e12 + y - y^2 (roots +-1e6) and y = 1e-6 + y - 1e-12 y^2 give a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0 (honest, same as before E12). Simulink's trust-region dogleg would reach them; a general fix needs a globalised solver. Found by the E12 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -310,6 +310,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-415 (closed): Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u
 - XBV-416 (closed): Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite sol
 - XBV-418 (closed): Algebraic loop y = 1 + 1e10 y under rk4: from step 2 the loop value is -8.27e-8 (exact -1e-10) and the gain output -827 (exact -1), no diagnostic; ode45 is exact. The loop value meets algTol*(1+\|y\|)
+- XBV-421 (closed): Algebraic loop convergence is judged on the residual (sweep change, Newton residual), not on the solution: y = c(t) + q y under rk4 misses algTol*(1+\|y\|) on the solution by about 1/(1-q): q = 0.9 6x
+- XBV-422 (closed): y = c + y - k y^2 with k = 1e-8 (solution 1e4) gives a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0: the Newton Jacobian 2 k y is 0 at the starting guess 0. Same before and after E11. Found by the E11 
 - XBV-423 (closed): Live ode23 / ode45 have no initial-step heuristic: the first internal step is the output step (AdaptiveSolver.ts ~412). For ode23 on x' = -x with dt = 1 the Bogacki-Shampine estimate is exactly 0 at h
 - XBV-424 (closed): maxStep does not cap the first step: live h0 = min(hint ?? dt, dt) ignores hMax (ode23 one step of 1.0 with maxStep 0.01), batch h0 = span / 50 = 0.2 (981 steps for T = 10, maxStep 0.01, instead of at
 - XBV-425 (closed): Batch ode23 / ode45 accept a step at minStep that misses the tolerance with no diagnostic (AdaptiveSolver.ts ~298, accept = ... \|\| (batch && atMinStep)): error 2.9e-3 at RelTol 1e-9, silent; live re
