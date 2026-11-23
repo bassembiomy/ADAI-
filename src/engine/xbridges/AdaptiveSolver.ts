@@ -69,12 +69,14 @@ interface IntegrateConfig {
   span?: number;
   /**
    * Batch semantics (Solvers.runFixedStep): discrete states are updated at every trial, the last stage is reused as the
-   * next first stage, and a step at the minimum step is accepted. Live semantics: the caller updated the discrete states
-   * once for the output step, and a step that cannot meet the tolerance at the minimum step is a failure.
+   * next first stage. Live semantics: the caller updated the discrete states
+   * once for the output step. Both: a step that cannot meet the tolerance at the minimum step is a failure (XBV-425).
    */
   batch: boolean;
   /** Live: computeOutputs(t0) already ran for this interval. */
   outputsReady?: boolean;
+  /** Take the first step from the initial-step heuristic (limited by h0, hMax) instead of h0 (start of a run, no valid hint). */
+  initialStepHeuristic?: boolean;
 }
 
 /** Bisection precision of an event time; the located bracket [tLow, tHigh] is at most this wide. */
@@ -82,6 +84,39 @@ const EVENT_TIME_TOL = 1e-12;
 
 /** Step-size hint carried between the output steps of a live run, per engine and solver. */
 const LIVE_STEP_HINT = new WeakMap<object, Map<Tableau, number>>();
+
+/**
+ * Validation of the step limits (XBV-426): maxStep and minStep, when given, are finite and > 0, and minStep <= maxStep.
+ * Returns the problem text, or null when the limits are usable. Shared by every variable-step solver, live and batch.
+ */
+export function stepLimitProblem(minStep: number | undefined, maxStep: number | undefined): string | null {
+  const okPos = (v: number | undefined) => v === undefined || (typeof v === 'number' && Number.isFinite(v) && v > 0);
+  if (!okPos(maxStep)) return `maxStep must be a finite number > 0 (maxStep = ${maxStep}).`;
+  if (!okPos(minStep)) return `minStep must be a finite number > 0 (minStep = ${minStep}).`;
+  if (minStep !== undefined && maxStep !== undefined && minStep > maxStep) return `minStep must not exceed maxStep (minStep = ${minStep}, maxStep = ${maxStep}).`;
+  return null;
+}
+
+/**
+ * Initial step of a variable-step Runge-Kutta run (Hairer, Norsett, Wanner, "Solving ODEs I", II.4, as used by MATLAB ode45
+ * and ode23 and by Simulink at the start and after a reset): h = 1 / ||f0 / max(|y0|, AbsTol / RelTol)||_inf / (0.8 RelTol^(1/q)),
+ * limited to the interval. q is the order of the error estimate (ode45: 5, ode23: 3). 'Infinity' when f0 is zero.
+ */
+function initialStep(engine: XbridgesEngine, tab: Tableau, k1: Map<string, any>, relTol: number, absTol: number): number {
+  const threshold = absTol / relTol;
+  let rh = 0;
+  const walk = (f: any, y: any) => {
+    if (typeof f === 'number') {
+      const yv = typeof y === 'number' ? Math.abs(y) : 0;
+      const r = Math.abs(f) / Math.max(yv, threshold);
+      if (Number.isNaN(r)) rh = Number.POSITIVE_INFINITY; else if (r > rh) rh = r;
+    } else if (Array.isArray(f)) f.forEach((fv, i) => walk(fv, y?.[i]));
+    else if (typeof f === 'object' && f !== null) for (const key in f) walk(f[key], y?.[key]);
+  };
+  k1.forEach((f, blockId) => walk(f, engine.getBlock(blockId)?.state));
+  rh /= 0.8 * Math.pow(relTol, -tab.acceptExponent);
+  return rh > 0 ? 1 / rh : Number.POSITIVE_INFINITY;
+}
 
 function reportError(engine: XbridgesEngine, code: string, message: string) {
   if (!engine.diagnostics.some(d => d.code === code)) engine.diagnostics.push({ severity: 'error', code, message });
@@ -200,11 +235,13 @@ export class AdaptiveSolver {
    */
   private static integrate(
     engine: XbridgesEngine, tab: Tableau, t0: number, tEnd: number, cfg: IntegrateConfig,
-  ): { ok: boolean; hNext: number } {
+  ): { ok: boolean; hNext: number; hintOk: boolean } {
     const lastStage = tab.b.length - 1;
     const hasZc = engine.executionOrder.some(b => !!b.ZeroCrossingFn);
     let t = t0;
-    let h = cfg.h0;
+    let h = Math.min(cfg.h0, cfg.hMax); // the first step is capped by maxStep too (XBV-424)
+    let needInitial = cfg.initialStepHeuristic === true;
+    let lastLteZero = false; // the last accepted step had an error estimate of exactly 0 (blind estimate or a trivial system)
     let cTime = 0.0; // Kahan compensation for time accumulation
     let k1: Map<string, any> = new Map();
     let k1Valid = false;
@@ -222,14 +259,14 @@ export class AdaptiveSolver {
     const maxPasses = cfg.batch ? MAX_INTERNAL_STEPS_BATCH : MAX_INTERNAL_STEPS_LIVE;
 
     while (t < tEnd && !engine.hasFatalError()) {
-      if (++passes > maxPasses) { reportStepBudget(engine, maxPasses, t, 'Variable-step solver'); return { ok: false, hNext: h }; }
+      if (++passes > maxPasses) { reportStepBudget(engine, maxPasses, t, 'Variable-step solver'); return { ok: false, hNext: h, hintOk: false }; }
       if (event === null && hasSched) {
         // Time-scheduled events (PWM carrier edges, Step, square waves): the solver lands exactly on each one.
         const se = scheduledEvent(engine, t, tEnd, cfg.hMin, sched);
         if (se === 'close') {
           reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL',
             `Variable-step solver: scheduled events at t = ${t} are spaced closer than the minimum step ${cfg.hMin}; the requested accuracy cannot be met.`);
-          return { ok: false, hNext: h };
+          return { ok: false, hNext: h, hintOk: false };
         }
         if (se !== null) event = se;
       }
@@ -276,6 +313,11 @@ export class AdaptiveSolver {
         baseStates = null;
       }
       if (engine.hasFatalError()) break;
+      if (needInitial) {
+        needInitial = false;
+        const hInit = Math.min(initialStep(engine, tab, k1, cfg.relTol, cfg.absTol), cfg.hMax, cfg.h0);
+        if (hInit < h) { h = Math.max(hInit, cfg.hMin); continue; }
+      }
 
       // A block fault raised only at a trial point (a stage of the step, not the accepted base point) rejects the step
       // and retries it smaller, as Simulink does; at the minimum step the fault stands and stops the run.
@@ -295,13 +337,25 @@ export class AdaptiveSolver {
       }
       const lte = AdaptiveSolver.errorNorm(tr.errors, cfg.relTol, cfg.absTol);
       const atMinStep = hTry <= cfg.hMin;
-      const accept = sliver || lte <= 1 || (cfg.batch && atMinStep);
+      let accept = sliver || lte <= 1;
+      // A step at the minimum step that straddles a zero crossing misses the tolerance because of the discontinuity: the crossing is
+      // located first (as Simulink does, the step is cut at the event), and the error test applies to the steps on either side.
+      if (!accept && atMinStep && hasZc && (event === null || event.scheduled === true)) {
+        if (zcBase === null) {
+          baseStates = snapshotStates(engine);
+          engine.computeOutputs(t, baseStates);
+          zcBase = engine.getZeroCrossings(t, baseStates);
+        }
+        engine.computeOutputs(t + hTry, tr.candidate);
+        if (crossedOrTouched(zcBase, engine.getZeroCrossings(t + hTry, tr.candidate))) accept = true;
+      }
 
       if (!accept) {
         if (atMinStep) {
+          // Simulink reports a minimum-step violation; batch and live runs fail the same way (XBV-425).
           reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL',
             `Variable-step solver cannot meet RelTol ${cfg.relTol} / AbsTol ${cfg.absTol} at t = ${t}: the step fell to the minimum step ${cfg.hMin}.`);
-          return { ok: false, hNext: h };
+          return { ok: false, hNext: h, hintOk: false };
         }
         const factor = 0.9 * Math.pow(lte, tab.rejectExponent);
         h = Math.max(cfg.hMin, hTry * Math.max(0.1, Math.min(0.9, factor)));
@@ -320,7 +374,7 @@ export class AdaptiveSolver {
           const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
           if (crossings.note(located.tHigh, EVENT_TIME_TOL)) {
             reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver'));
-            return { ok: false, hNext: h };
+            return { ok: false, hNext: h, hintOk: false };
           }
           event = located;
           continue; // same base state and first stage, new target
@@ -337,6 +391,7 @@ export class AdaptiveSolver {
         t = temp;
       }
       if (!sliver) {
+        lastLteZero = !(lte > 0);
         const factor = lte > 0 ? 0.9 * Math.pow(lte, tab.acceptExponent) : 5.0;
         let hNew = Math.max(cfg.hMin, Math.min(cfg.hMax, hTry * Math.max(0.1, Math.min(5.0, factor))));
         // A step shortened to land on the target says nothing against the step that was asked for.
@@ -357,7 +412,7 @@ export class AdaptiveSolver {
       zcBase = null;
       baseStates = null;
     }
-    return { ok: !engine.hasFatalError(), hNext: h };
+    return { ok: !engine.hasFatalError(), hNext: h, hintOk: !lastLteZero };
   }
 
   private static runVariable(engine: XbridgesEngine, options: SolverOptions, tab: Tableau) {
@@ -369,12 +424,20 @@ export class AdaptiveSolver {
       reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', `Relative and absolute tolerance must be finite and > 0 (relTol = ${relTol}, absTol = ${absTol}).`);
       return;
     }
-    const h0 = options.fixedStep ?? Math.max(1e-4, Math.min(0.01, (stopTime - startTime) / 100));
+    const limitProblem = stepLimitProblem(options.minStep, options.maxStep);
+    if (limitProblem !== null) {
+      reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', `Variable-step solver: ${limitProblem}`);
+      return;
+    }
     const hMin = options.minStep ?? 1e-6;
     const hMax = options.maxStep ?? 0.05;
+    // A given fixedStep is the first step; otherwise the initial-step heuristic decides it (XBV-423). Both are capped by maxStep.
+    const h0 = options.fixedStep ?? (stopTime - startTime);
 
     engine.compile(startTime);
-    AdaptiveSolver.integrate(engine, tab, startTime, stopTime, { relTol, absTol, hMin, hMax, h0, batch: true, span: stopTime - startTime });
+    AdaptiveSolver.integrate(engine, tab, startTime, stopTime, {
+      relTol, absTol, hMin, hMax, h0, batch: true, span: stopTime - startTime, initialStepHeuristic: options.fixedStep === undefined,
+    });
     engine.finishAtStopTime(stopTime);
   }
 
@@ -399,22 +462,31 @@ export class AdaptiveSolver {
       reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', `Relative and absolute tolerance must be finite and > 0 (relTol = ${relTol}, absTol = ${absTol}).`);
       return false;
     }
+    const limitProblem = stepLimitProblem(engine.options?.minStep, engine.options?.maxStep);
+    if (limitProblem !== null) {
+      reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', `Variable-step solver: ${limitProblem}`);
+      return false;
+    }
     engine.computeOutputs(t);
     engine.updateDiscreteStates(t);
     if (engine.hasFatalError()) return false;
     let hints = LIVE_STEP_HINT.get(engine);
     if (!hints) { hints = new Map(); LIVE_STEP_HINT.set(engine, hints); }
     const hint = hints.get(tab);
+    const hintValid = hint !== undefined && Number.isFinite(hint) && hint > 0;
     const res = AdaptiveSolver.integrate(engine, tab, t, t + dt, {
       relTol, absTol,
       hMin: Math.max(engine.options?.minStep ?? 0, 16 * Number.EPSILON * Math.max(1, Math.abs(t))),
       hMax: engine.options?.maxStep ?? Number.POSITIVE_INFINITY,
-      h0: Math.min(hint ?? dt, dt),
+      // A valid hint carries over; at the start of a run (or when the hint is invalid) the initial-step heuristic decides.
+      h0: hintValid ? Math.min(hint, dt) : dt,
+      initialStepHeuristic: !hintValid,
       span: dt,
       batch: false,
       outputsReady: true,
     });
-    if (res.ok && Number.isFinite(res.hNext) && res.hNext > 0) hints.set(tab, res.hNext);
+    // A step size that was grown only because the estimate vanished is not carried over (XBV-423).
+    if (res.ok && res.hintOk && Number.isFinite(res.hNext) && res.hNext > 0) hints.set(tab, res.hNext); else hints.delete(tab);
     return res.ok;
   }
 
