@@ -66,8 +66,10 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       }
     });
     // Nonlinear slow loop: z = F(z) = z - (z - c)^3, c = 0.5, fixed point z = c (a triple root of z - F(z) = (z - c)^3).
-    // Newton on g(z) = (z - c)^3 shrinks e = z - c by 2/3 per iteration (e' = e - e^3 / (3 e^2)); the stop test is |e|^3 < algTol.
-    // From z0 = 0 (e0 = -0.5) and algTol 1e-6 it needs |e| < 1e-2: n >= ln(50) / ln(1.5) = 9.65, i.e. 10 iterations.
+    // Newton on g(z) = (z - c)^3 shrinks e = z - c by 2/3 per iteration (e' = e - e^3 / (3 e^2)).
+    // XBV-421: convergence is judged on the solution, |z - z*| <= algTol (1 + |z*|), not on the residual |e|^3 (which would accept |e| = 1e-2 at
+    // algTol 1e-6). From e0 = -0.5 plain Newton needs (2/3)^n <= 3e-6, about 31 iterations at 1e-6 and 54 at 1e-10; an engine that accelerates
+    // (e.g. detects the multiple root) may need fewer, so the tests pin the outcome and the ordering, not the count.
     // Gauss-Seidel (e' = e - e^3) is sublinear (e ~ 1/sqrt(2n)), so it does not settle in 50 passes either.
     const slow: ModelSpec = {
       blocks: [
@@ -81,18 +83,24 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(r.codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
       expect(r.fatal).toBe(true);
     });
-    it('maxIter 100 converges to z = 0.5 with |z - c|^3 < algTol, no diagnostic', () => {
-      const r = solve(slow, { algTol: 1e-6, maxIter: 100 }, ['s2', 'out']);
-      expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-      expect(Math.abs(r.y - 0.5) ** 3).toBeLessThan(1e-6);
+    for (const algTol of [1e-6, 1e-10]) {
+      it(`maxIter 100 converges to z = 0.5 within algTol ${algTol} on the solution, no diagnostic`, () => {
+        const r = solve(slow, { algTol, maxIter: 100 }, ['s2', 'out']);
+        expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+        expect(Math.abs(r.y - 0.5)).toBeLessThanOrEqual(algTol * 1.5);
+      });
+    }
+    const minIter = (algTol: number) => { for (let n = 1; n <= 100; n++) if (!solve(slow, { algTol, maxIter: n }).codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')) return n; return Infinity; };
+    it('the threshold is monotone: below the least sufficient maxIter every count fails, above it every count succeeds', () => {
+      const n = minIter(1e-6);
+      expect(n).toBeGreaterThan(3);
+      expect(n).toBeLessThanOrEqual(100);
+      for (const m of [n - 1, Math.max(1, n - 3)]) expect(solve(slow, { algTol: 1e-6, maxIter: m }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      for (const m of [n + 1, n + 10, 100]) expect(solve(slow, { algTol: 1e-6, maxIter: m }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
-    it('the threshold is monotone: 5 iterations fail, 12 succeed (hand count 10, margin for the finite-difference Jacobian)', () => {
-      expect(solve(slow, { algTol: 1e-6, maxIter: 5 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-      expect(solve(slow, { algTol: 1e-6, maxIter: 12 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-    });
-    it('a tighter algTol needs more iterations: maxIter 12 converges at 1e-6 but not at 1e-10 (|e| < 4.6e-4 needs 18)', () => {
-      expect(solve(slow, { algTol: 1e-10, maxIter: 12 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-      expect(solve(slow, { algTol: 1e-10, maxIter: 60 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+    it('a tighter algTol needs more iterations: least sufficient maxIter at 1e-10 > at 1e-6', () => {
+      expect(minIter(1e-10)).toBeGreaterThan(minIter(1e-6));
+      expect(minIter(1e-10)).toBeLessThanOrEqual(100);
     });
   });
 
@@ -132,6 +140,38 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
         for (const v of run.signals['gb.y']) expect(Math.abs(Number(v) - gy), `gb.y = ${v}`).toBeLessThanOrEqual(1e-6 * Math.abs(gy));
       });
     }
+    // XBV-421: near-unit contraction y = c(t) + q y, c = 1 + 0.1 t (Clock): the exact solution is c / (1 - q). Convergence is judged on the
+    // solution (|y - y*| <= algTol (1 + |y*|), algTol 1e-6 default), so a small sweep change is not enough when q is close to 1.
+    const qLoop = (q: number): ModelSpec => ({
+      blocks: [{ id: 'clk', type: 'Clock' }, { id: 'k', type: 'GAIN', params: { gain: 0.1 } }, { id: 'one', type: 'Constant', params: { value: 1 } },
+        { id: 's', type: 'Sum', params: { signs: '+++' } }, { id: 'gq', type: 'GAIN', params: { gain: q } }],
+      wires: ['clk.clk -> k.u', 'one.out -> s.in1', 'k.y -> s.in2', 's.out -> gq.u', 'gq.y -> s.in3'],
+    });
+    for (const q of [0.9, 0.99, 0.9999, 0.999999, -0.999]) {
+      it(`y = 1 + 0.1 t + ${q} y, rk4 over 20 steps: within algTol on the solution at every step`, () => {
+        const run = runModel(buildModel(qLoop(q)), { solver: 'rk4', dt: 0.1, stopTime: 2, probes: ['s.out'] });
+        expect(run.diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)).toEqual([]);
+        run.t.forEach((t, i) => {
+          const ys = (1 + 0.1 * t) / (1 - q);
+          expect(Math.abs(Number(run.signals['s.out'][i]) - ys), `t ${t}`).toBeLessThanOrEqual(1e-6 * (1 + Math.abs(ys)));
+        });
+      });
+    }
+    // XBV-421 / 422: nonlinear y = 1 + y - k y^2 (Sum + + -, PRODUCT y y, Gain k): y* = 1 / sqrt(k); the loop map has slope 1 - 2 k y* = 1 - 2 sqrt(k)
+    // (0.998 for k = 1e-6), and for k = 1e-8 the Newton Jacobian 2 k y is 0 at the starting guess 0, which must not end the solve.
+    const kLoop = (k: number): ModelSpec => ({
+      blocks: [{ id: 'one', type: 'Constant', params: { value: 1 } }, { id: 's', type: 'Sum', params: { signs: '++-' } },
+        { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } }, { id: 'gk', type: 'GAIN', params: { gain: k } }],
+      wires: ['one.out -> s.in1', 's.out -> s.in2', 's.out -> p.in1', 's.out -> p.in2', 'p.y -> gk.u', 'gk.y -> s.in3'],
+    });
+    for (const k of [1e-6, 1e-8]) {
+      it(`y = 1 + y - ${k} y^2: y* = ${1 / Math.sqrt(k)} within algTol on the solution, rk4 over 10 steps, no error`, () => {
+        const run = runModel(buildModel(kLoop(k)), { solver: 'rk4', dt: 0.1, stopTime: 1, probes: ['s.out'] });
+        expect(run.diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)).toEqual([]);
+        const ys = 1 / Math.sqrt(k);
+        for (const v of run.signals['s.out']) expect(Math.abs(Number(v) - ys), `s.out = ${v}`).toBeLessThanOrEqual(1e-6 * (1 + ys));
+      });
+    }
     it('y = 1 + 1e10 * y is solvable in double precision: -1/(1e10 - 1) within 1e-6 relative, no error', () => {
       const r = solve(linearLoop(1, 1e10, 1), {});
       expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
@@ -152,9 +192,11 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(solve(slow, { maxIter: 3 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
       expect(solve(slow, { maxIter: 100 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
-    it('engine.options.algTol changes the outcome (maxIter 12: 1e-6 passes, 1e-10 fails)', () => {
-      expect(solve(slow, { algTol: 1e-6, maxIter: 12 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-      expect(solve(slow, { algTol: 1e-10, maxIter: 12 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+    it('engine.options.algTol changes the outcome (at the least maxIter that suffices for 1e-6, 1e-10 fails)', () => {
+      let n = 1;
+      while (n < 100 && solve(slow, { algTol: 1e-6, maxIter: n }).codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')) n++;
+      expect(solve(slow, { algTol: 1e-6, maxIter: n }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      expect(solve(slow, { algTol: 1e-10, maxIter: n }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
     it('the diagnostic message names the tolerance in force', () => {
       const e = new XbridgesEngine(buildModel(linearLoop(1, 1, 1)));
