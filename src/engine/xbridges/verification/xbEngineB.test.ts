@@ -68,8 +68,10 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
     // Nonlinear slow loop: z = F(z) = z - (z - c)^3, c = 0.5, fixed point z = c (a triple root of z - F(z) = (z - c)^3).
     // Newton on g(z) = (z - c)^3 shrinks e = z - c by 2/3 per iteration (e' = e - e^3 / (3 e^2)).
     // XBV-421: convergence is judged on the solution, |z - z*| <= algTol (1 + |z*|), not on the residual |e|^3 (which would accept |e| = 1e-2 at
-    // algTol 1e-6). From e0 = -0.5 plain Newton needs (2/3)^n <= 3e-6, about 31 iterations at 1e-6 and 54 at 1e-10; an engine that accelerates
-    // (e.g. detects the multiple root) may need fewer, so the tests pin the outcome and the ordering, not the count.
+    // algTol 1e-6). A triple root is only resolvable to |e| ~ (eps |z|)^(1/3) ~ 5e-6 from the residual in double precision, so the tests use
+    // algTol 1e-2 and 1e-4 (|e| <= 1.5e-2 / 1.5e-4, residual >= 3e-12, well above rounding). From e0 = -0.5 plain Newton needs (2/3)^n <= 3e-2
+    // or 3e-4, about 9 and 20 iterations; an engine that accelerates (e.g. Aitken, multiple-root detection) may need fewer, so the tests pin the
+    // outcome and the ordering, not the count. Every counted iteration must evaluate the loop (no iteration counted without work).
     // Gauss-Seidel (e' = e - e^3) is sublinear (e ~ 1/sqrt(2n)), so it does not settle in 50 passes either.
     const slow: ModelSpec = {
       blocks: [
@@ -83,7 +85,7 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(r.codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
       expect(r.fatal).toBe(true);
     });
-    for (const algTol of [1e-6, 1e-10]) {
+    for (const algTol of [1e-2, 1e-4]) {
       it(`maxIter 100 converges to z = 0.5 within algTol ${algTol} on the solution, no diagnostic`, () => {
         const r = solve(slow, { algTol, maxIter: 100 }, ['s2', 'out']);
         expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
@@ -92,15 +94,15 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
     }
     const minIter = (algTol: number) => { for (let n = 1; n <= 100; n++) if (!solve(slow, { algTol, maxIter: n }).codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')) return n; return Infinity; };
     it('the threshold is monotone: below the least sufficient maxIter every count fails, above it every count succeeds', () => {
-      const n = minIter(1e-6);
+      const n = minIter(1e-4);
       expect(n).toBeGreaterThan(3);
       expect(n).toBeLessThanOrEqual(100);
-      for (const m of [n - 1, Math.max(1, n - 3)]) expect(solve(slow, { algTol: 1e-6, maxIter: m }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-      for (const m of [n + 1, n + 10, 100]) expect(solve(slow, { algTol: 1e-6, maxIter: m }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      for (const m of [n - 1, Math.max(1, n - 3)]) expect(solve(slow, { algTol: 1e-4, maxIter: m }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      for (const m of [n + 1, n + 10, 100]) expect(solve(slow, { algTol: 1e-4, maxIter: m }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
-    it('a tighter algTol needs more iterations: least sufficient maxIter at 1e-10 > at 1e-6', () => {
-      expect(minIter(1e-10)).toBeGreaterThan(minIter(1e-6));
-      expect(minIter(1e-10)).toBeLessThanOrEqual(100);
+    it('a tighter algTol needs more iterations: least sufficient maxIter at 1e-4 > at 1e-2', () => {
+      expect(minIter(1e-4)).toBeGreaterThan(minIter(1e-2));
+      expect(minIter(1e-4)).toBeLessThanOrEqual(100);
     });
   });
 
@@ -192,11 +194,11 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(solve(slow, { maxIter: 3 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
       expect(solve(slow, { maxIter: 100 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
-    it('engine.options.algTol changes the outcome (at the least maxIter that suffices for 1e-6, 1e-10 fails)', () => {
+    it('engine.options.algTol changes the outcome (at the least maxIter that suffices for 1e-2, 1e-4 fails)', () => {
       let n = 1;
-      while (n < 100 && solve(slow, { algTol: 1e-6, maxIter: n }).codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')) n++;
-      expect(solve(slow, { algTol: 1e-6, maxIter: n }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
-      expect(solve(slow, { algTol: 1e-10, maxIter: n }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      while (n < 100 && solve(slow, { algTol: 1e-2, maxIter: n }).codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')) n++;
+      expect(solve(slow, { algTol: 1e-2, maxIter: n }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      expect(solve(slow, { algTol: 1e-4, maxIter: n }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
     it('the diagnostic message names the tolerance in force', () => {
       const e = new XbridgesEngine(buildModel(linearLoop(1, 1, 1)));
