@@ -115,8 +115,6 @@ export interface SolverOptions {
   algMaxPasses?: number;
   maxIter?: number;  // Max iterations for Newton-Raphson algebraic loop solver
   zeroTol?: number;  // Zero-crossing detection time tolerance
-  stiffDetect?: boolean; // Enable/disable stiffness detection
-  outputTimes?: number[]; // Specific times to output results
 }
 
 export interface ModelDiagnostic {
