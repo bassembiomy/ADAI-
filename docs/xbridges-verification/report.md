@@ -4,7 +4,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 25 done of 29; 2 in progress; 1 to do.
+- Work packages: 26 done of 29; 1 in progress; 1 to do.
 - Findings: 6 open, 242 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
@@ -43,7 +43,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-19 | UI component tests | done | S / F |
 | WP-20 | UI end-to-end | done | S / F |
 | WP-21 | Fix loop, one commit per finding | in_progress | S / H, verifier opus |
-| WP-22 | CI workflow, nightly random graphs, mutation run | in_progress | H / F |
+| WP-22 | CI workflow, nightly random graphs, mutation run | done | H / F |
 | WP-23 | Close-out report | todo | O / F |
 
 ## Gate coverage per block

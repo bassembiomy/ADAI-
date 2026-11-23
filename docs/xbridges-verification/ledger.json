@@ -668,8 +668,8 @@
     "WP-03",
     "WP-20"
    ],
-   "status": "in_progress",
-   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). CI runs observed: see ci_runs.",
+   "status": "done",
+   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). CI runs observed: see ci_runs. Completed 2026-11-23 (Haiku executor, controller rework, Opus verifier FAIL then PASS): testkit seedsFromEnv with XBV_SEED_BASE; nightly seed windows = days since epoch x 1000 (no overlap); xbEngine, xbWorker, xbTriParity use it; scripts/xbridges-verification/mutationRun.ts (22 anchored mutants, baseline-excluded kills, per-mutant timeout 3 x baseline, signal-safe restore), nightly / dispatch job continue-on-error, 350 min. Partial local report 5 of 22: survivors 16 (chatter limit) and 2 (Newton regularisation sign) are real test gaps, 1 / 5 / 21 near-equivalent. Full run and the two gap tests: remaining-work.md 4.1.",
    "ci_runs": [
     {
      "run": "43019317831",
