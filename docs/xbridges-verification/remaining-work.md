@@ -42,42 +42,43 @@ Known environment-only failures (not regressions):
 - HIL cross-compilers;
 - load flakes: TC-ROBOT-03, SLAM in `xbEquations.robot`, ec07, XBV-032.
 
-## 3. Work in flight (not yet merged)
+## 3. Work in flight
 
-| Item | Branch / commit | State | Next step |
-|---|---|---|---|
-| **E16**: XBV-430 (isRoot slack grows with \|z\|²), XBV-431 (far loop roots from a zero start) | `worktree-agent-a11f541db1b41b7cd` @ `1ec3bf1d`; acceptance `d973c610` on automative (4 tests red there) | Verifier running | On PASS: merge, close XBV-430/431, full suite, push. Open question for the verifier: 23 warm-started no-solution loops (y = u + y with \|u\| <= algTol(1+\|z\|), e.g. u = 1 at \|z\| = 1e13) are accepted. Decide whether that is "within tolerance on the solution" or false convergence. If false, add acceptance and send a rework. |
-| **WP-22**: nightly seed rotation and mutation run | `worktree-agent-a385cf06d9d3966b2` @ `efea9e79` + rework `eba7bad0` | Re-verification running | On PASS: merge and push. Update the WP-22 note in the ledger: `seedsFromEnv`, days-since-epoch × 1000 seed windows, `scripts/xbridges-verification/mutationRun.ts`, nightly / dispatch job, partial report 5 of 22. |
+Nothing is in flight as of the last update (2026-11-23, evening). Merged and pushed since the first version of this
+file:
+- E16 (XBV-430, XBV-431). XBV-431 is narrowed to roots up to 1e8 in two wirings; larger roots are XBV-436.
+- WP-22: nightly seed windows and the mutation run.
+- The chatter-limit boundary test.
+- XBV-435: Kalman vector parity.
+- The full mutation run: kill rate 45.5 %, recorded as XBV-437.
 
-Until E16 merges, the 4 XBV-431 tests in `xbEngineB.test.ts` are red on `automative`. That is expected.
+State: 26 of 29 work packages done, 6 findings open (XBV-417, 419, 420, 434, 436, 437).
 
 ## 4. Remaining work, in order
 
-### 4.1 Test-strength gaps from the mutation run (small, controller + executor)
+### 4.1 XBV-437: tests that kill the real surviving mutants (small)
 
-Mutants that survived and have a real gap:
+See `docs/xbridges-verification/mutation-report.md`. Add tests to
+`src/engine/xbridges/verification/xbMutationGaps.test.ts`, then confirm each kill by applying the mutant by hand and
+restoring it with `git checkout`.
 
-- **Mutant 16, chatter limit `>` to `>=`** (`zeroCrossingGuard.ts`). Add a unit test of `ConsecutiveCrossings`: 1000
-  notes at the same time give false, the 1001st gives true.
-- **Mutant 2, sign of the Newton regularisation** (`XbridgesEngine.ts`, JᵀJ + 1e-8). Add a loop whose Jacobian is
-  singular, so the regularised Levenberg-Marquardt direction is used, and assert the converged value.
-- **Optional, mutant 21, saturation region `u >= hi`.** Feed u exactly equal to hi and check the region-dependent
-  zero-crossing / derivative behaviour.
+- **#10:** `let h = Math.min(cfg.h0, cfg.hMax)` changed to `Math.max`. Find out why the E13 maxStep test does not catch
+  it; the mutation subset is the verification folder, so check that test's maxStep and h0 values. Add a batch and a
+  live case where h0 > maxStep and the first step must equal maxStep.
+- **#12:** `Solvers.ts` `Math.min(dt, stopTime - t)` changed to `stopTime + t`. Add a batch discrete run whose stop time
+  is not a multiple of dt (e.g. 0.35 with dt 0.1). The last step must be 0.05 and the final time exactly 0.35.
+- **#15:** a touch (`a*b <= 0`) counted as a crossing. Add a signal that touches 0 and returns. It must not be located
+  as an event, and the run must stay identical to base. This relates to XBV-419 / 420.
+- **#8:** event bracket end not clamped to the interval end. Add an event closer than 2·EVENT_TIME_TOL to the end of
+  an output step; the next output time must be exact.
 
-Mutants 1 and 5 are near-equivalent or equivalent. Note them in `mutation-report.md`; no test is needed.
+Near-equivalent mutants (#1, 2, 3, 4, 5, 6, 14, 21) need no test. Note them in the report.
 
-Then run the full mutation run once, `npx tsx scripts/xbridges-verification/mutationRun.ts` (about 2 min per
-mutant, 23 runs), and commit the complete `mutation-report.md`.
+### 4.2 XBV-436 (S4, optional)
 
-### 4.2 XBV-435: coverage gap (S4)
-
-- Add a KALMAN_FILTER code-parity scenario with vector and matrix dimensions in
-  `src/utils/stateMachine/xbCodeParityB.test.ts`. Set A, B, C, Q, R and P0 explicitly with matching sizes (e.g. a
-  2-state, 1-input, 1-output system), so the builder does not refuse it with XB_SHAPE_MISMATCH. Run it in float64
-  and float32.
-- Add a passing float32 assertion for the innovation output. Bound it by operand scale, 8·2⁻²⁴·max(|y_meas|, |C x|);
-  after E15 it should be exact.
-- If the generator refuses the vector case although the capability says `allShapes`, record a finding.
+Loops with roots above 1e8 from a zero start depend on the wiring. Either leave the finding open as a documented
+limitation, or make the globalised Newton phase scale-invariant (variable scaling by a running estimate of |z|) and
+add both wirings for roots 1e9 and 1e10.
 
 ### 4.3 Decisions only the user can make
 
@@ -118,12 +119,12 @@ agree for XBV-419.
 
 ### 4.5 WP-23: close-out (last)
 
-Prerequisites: E16 and WP-22 merged, 4.1 and 4.2 done, decisions 4.3 recorded.
+Prerequisites: 4.1 done, 4.2 decided, decisions 4.3 recorded.
 
 - **Final report.** Generate `report.md` from the ledger, per block × gate. Include:
   - findings fixed and open, with reasons;
   - decisions D1-D19 and any new ones;
-  - mutation score from the full run;
+  - mutation score (45.5 % on 2026-11-23; rerun after 4.1);
   - coverage gaps (the 18 stateful blocks that do not move under the stimulus, the 14 FAR_SKIPPED types);
   - gate G `pending` for all blocks (no MATLAB).
 - **Help.** Update it with every documented difference from Simulink:
@@ -138,18 +139,17 @@ Prerequisites: E16 and WP-22 merged, 4.1 and 4.2 done, decisions 4.3 recorded.
 
   Keep `npm run -s help:coverage` and `test:help` green, and add AUTHORED entries in
   `scripts/help/reviewLiveUi.ts` where needed.
-- **Ledger.** Set WP-21, WP-22 and WP-23 to done (WP-15 stays `waiting_matlab`). Run the full gates and push.
+- **Ledger.** Set WP-21 and WP-23 to done (WP-15 stays `waiting_matlab`). Run the full gates and push.
 
 ## 5. Effort estimate (from the pace so far)
 
 | Item | Estimate |
 |---|---|
-| E16 and WP-22 merge | 1-2 h (more if E16 needs a rework) |
-| 4.1 test gaps + full mutation run | 2-3 h |
-| 4.2 Kalman vector coverage | 1-2 h, plus a fix batch if it finds a defect |
-| 4.3, option A for XBV-434 (float32 per operation) | 1-2 days |
-| 4.3, option B for XBV-434 | 1 h |
-| 4.3, XBV-417 UI | half a day |
+| 4.1 XBV-437 gap tests | 2-3 h |
+| 4.2 XBV-436 | 30 min to document as a limitation, or half a day to fix |
+| 4.3, XBV-434 option A (float32 per operation) | 1-2 days |
+| 4.3, XBV-434 option B (documented as a decision) | 1 h |
+| 4.3, XBV-417 UI field | half a day |
 | 4.3, XBV-417 documented | 30 min |
 | 4.5 close-out | 3-4 h |
 | WP-15 goldens, when MATLAB is available | half a day to build, plus the run on the user's machine |
