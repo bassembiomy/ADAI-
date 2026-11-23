@@ -669,7 +669,7 @@
     "WP-20"
    ],
    "status": "done",
-   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). CI runs observed: see ci_runs. Completed 2026-11-23 (Haiku executor, controller rework, Opus verifier FAIL then PASS): testkit seedsFromEnv with XBV_SEED_BASE; nightly seed windows = days since epoch x 1000 (no overlap); xbEngine, xbWorker, xbTriParity use it; scripts/xbridges-verification/mutationRun.ts (22 anchored mutants, baseline-excluded kills, per-mutant timeout 3 x baseline, signal-safe restore), nightly / dispatch job continue-on-error, 350 min. Partial local report 5 of 22: survivors 16 (chatter limit) and 2 (Newton regularisation sign) are real test gaps, 1 / 5 / 21 near-equivalent. Full run and the two gap tests: remaining-work.md 4.1.",
+   "note": "Workflow .github/workflows/xbridges-verification.yml added (controller): unit (verification + kit, test:xbridges, powertrain, inventory and report up to date), embedded (V6 tri-parity, V7 code parity with gcc/clang, state-machine alignment + AUTOSAR), e2e (Playwright Chromium), nightly schedule. Not yet: nightly seed rotation (random graphs use fixed seeds), mutation run (no mutation tool in the repo), float32 parity (WP-17b). CI runs observed: see ci_runs. Completed 2026-11-23 (Haiku executor, controller rework, Opus verifier FAIL then PASS): testkit seedsFromEnv with XBV_SEED_BASE; nightly seed windows = days since epoch x 1000 (no overlap); xbEngine, xbWorker, xbTriParity use it; scripts/xbridges-verification/mutationRun.ts (22 anchored mutants, baseline-excluded kills, per-mutant timeout 3 x baseline, signal-safe restore), nightly / dispatch job continue-on-error, 350 min. Partial local report 5 of 22: survivors 16 (chatter limit) and 2 (Newton regularisation sign) are real test gaps, 1 / 5 / 21 near-equivalent. Full run and the two gap tests: remaining-work.md 4.1. Full mutation run done 2026-11-23: 22 mutants, kill rate 45.5 % (9 killed, 1 timeout, 12 survived); real gaps recorded as XBV-437.",
    "ci_runs": [
     {
      "run": "43019317831",
@@ -2930,8 +2930,9 @@
    "plan_ref": "7.1 code parity",
    "severity": "S4",
    "gate": "V7",
-   "status": "open",
-   "summary": "Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refused (XB_SHAPE_MISMATCH) although the capability says allShapes. Also: the float32 innovation output has no passing assertion (only the it.fails), and SIN / COSEC are checked at 0 ULP because the stimulus baseline contains sin (stricter, may fail on another libm). Found by WP-17b and its verifier."
+   "status": "closed",
+   "summary": "Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refused (XB_SHAPE_MISMATCH) although the capability says allShapes. Also: the float32 innovation output has no passing assertion (only the it.fails), and SIN / COSEC are checked at 0 ULP because the stimulus baseline contains sin (stricter, may fail on another libm). Found by WP-17b and its verifier.",
+   "fix": "Test coverage added (xbCodeParityB V7B-4, 14 tests, verifier PASS): 2-state Kalman filter with 1 and 2 outputs, interpreter = C bit-exact in float64 and float32 (euler, discrete), float32 innovation bound (worst 0), independent hand-written float64 Kalman oracle vs the canvas (relative 0 over 20 ticks; hand-checked 2 ticks). No defect found."
   },
   {
    "id": "XBV-436",
@@ -2940,6 +2941,14 @@
    "gate": "V4",
    "status": "open",
    "summary": "Algebraic loops with roots above about 1e8 from a zero start depend on the wiring: y = 1 + y - k y^2 converges for k = 1e-18 / 1e-20 (roots 1e9 / 1e10) with Sum '++-' and Gain +k but is fatal with Sum '+++' and Gain -k; y = 1e-3 + y - 1e-20 y^2 (root 3.16e8) and k = 1e-22 are fatal in both wirings. All honest fatals (no false roots). Found by the E16 verifier."
+  },
+  {
+   "id": "XBV-437",
+   "plan_ref": "WP-22 mutation run",
+   "severity": "S4",
+   "gate": "V8",
+   "status": "open",
+   "summary": "Full mutation run (2026-11-23, 22 mutants, docs/xbridges-verification/mutation-report.md): killed 9, timeout 1, survived 12, kill rate 45.5 %. Real test gaps: #10 first step no longer capped by maxStep (h = max(h0, hMax)) survives although XBV-424 is pinned - the E13 test does not detect it under the mutation subset; #12 batch discrete last step min(dt, stopTime + t); #15 a touch (product <= 0) counted as a crossing (relates to XBV-419/420); #8 event bracket end not clamped to the interval end. Near-equivalent or equivalent: #1 loop tolerance <= vs <, #2 regularisation sign (no effect on an exactly singular JtJ), #3 one extra Gauss-Seidel pass, #4 one fewer halving try, #5 / #6 bisection bound, #14 rounding offset in the step count, #21 saturation region at u == hi (output identical). Add tests that kill #10, #12, #15, #8."
   }
  ],
  "blocks": {

@@ -5,7 +5,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 26 done of 29; 1 in progress; 1 to do.
-- Findings: 6 open, 242 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 6 open, 243 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
   - S3 (diagnostic, UI or convention deviation): 2 open
@@ -82,8 +82,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
-| XBV-435 | V7 | 7.1 code parity | Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refused (XB_SHAPE_MISMATCH) although the capability says allShapes. Also: the float32 innovation output has no passing assertion (only the it.fails), and SIN / COSEC are checked at 0 ULP because the stimulus baseline contains sin (stricter, may fail on another libm). Found by WP-17b and its verifier. |
 | XBV-436 | V4 | 5.2 engine | Algebraic loops with roots above about 1e8 from a zero start depend on the wiring: y = 1 + y - k y^2 converges for k = 1e-18 / 1e-20 (roots 1e9 / 1e10) with Sum '++-' and Gain +k but is fatal with Sum '+++' and Gain -k; y = 1e-3 + y - 1e-20 y^2 (root 3.16e8) and k = 1e-22 are fatal in both wirings. All honest fatals (no false roots). Found by the E16 verifier. |
+| XBV-437 | V8 | WP-22 mutation run | Full mutation run (2026-11-23, 22 mutants, docs/xbridges-verification/mutation-report.md): killed 9, timeout 1, survived 12, kill rate 45.5 %. Real test gaps: #10 first step no longer capped by maxStep (h = max(h0, hMax)) survives although XBV-424 is pinned - the E13 test does not detect it under the mutation subset; #12 batch discrete last step min(dt, stopTime + t); #15 a touch (product <= 0) counted as a crossing (relates to XBV-419/420); #8 event bracket end not clamped to the interval end. Near-equivalent or equivalent: #1 loop tolerance <= vs <, #2 regularisation sign (no effect on an exactly singular JtJ), #3 one extra Gauss-Seidel pass, #4 one fewer halving try, #5 / #6 bisection bound, #14 rounding offset in the step count, #21 saturation region at u == hi (output identical). Add tests that kill #10, #12, #15, #8. |
 
 ## Closed, merged or superseded findings
 
@@ -329,6 +329,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-431 (closed): Far roots are not reached from a zero start: y = 1 + y - k y^2 for k = 1e-14..1e-20 (roots 1e7..1e10), y = 1e12 + y - y^2 (roots +-1e6) and y = 1e-6 + y - 1e-12 y^2 give a fatal ALGEBRAIC_LOOP_NOT_CON
 - XBV-432 (closed): KALMAN_FILTER float32: the embedded interpreter stores x and P without convertValue (xbInterpreter.ts ~1749-1750), the generated C stores them as float; the state differs by one float32 rounding per t
 - XBV-433 (closed): VectorPow float32 emits powf((double)a, (double)b) (xbCGenerator.ts emitVectorElementwisePower ~1190): the strict compile fails with -Werror=float-conversion; exact for float32 inputs but would narrow
+- XBV-435 (closed): Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refu
 
 ## Decisions
 
