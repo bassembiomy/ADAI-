@@ -4,12 +4,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 23 done of 29; 1 in progress; 5 to do.
-- Findings: 0 open, 225 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Work packages: 24 done of 29; 1 in progress; 4 to do.
+- Findings: 4 open, 225 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 0 open
-  - S4 (documentation): 0 open
+  - S2 (crash, stop, freeze or silent no-op): 2 open
+  - S3 (diagnostic, UI or convention deviation): 1 open
+  - S4 (documentation): 1 open
 - Decisions recorded: 18; open: 0.
 
 ## Work packages
@@ -32,7 +32,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-12 | Solvers part A: orders on 5 problems, polynomial exactness, stiff stability, algebraic loop per solver, dispatcher and argument agreement, batch edge inputs | done | S / F |
 | WP-12b | Solvers part B: adaptive error control on the canvas (D3: ode23/ode45/ode23tb with RelTol/AbsTol), outputTimes and stop-time hit, maxStep/minStep, stiffness diagnostic, Van der Pol and Robertson, time accumulation (XBV-017) | todo | S / F |
 | WP-13 | Engine semantics | done | S / F |
-| WP-13b | Engine part B: algTol/maxIter, more rate ratios, zero crossings for D2 blocks once XBV-036 is fixed, DOE evaluator diagnostic codes (src/engine/doe) | todo | S / F |
+| WP-13b | Engine part B: algTol/maxIter, more rate ratios, zero crossings for D2 blocks once XBV-036 is fixed, DOE evaluator diagnostic codes (src/engine/doe) | done | S / F |
 | WP-14 | Worker parity and protocol | done | S / F |
 | WP-14b | Worker part B: snapshot round trip of every stateful block through the real client (ROBOT_VACUUM_COMM), cancel mid-batch, hybrid blocks with gear-shift stimulus after XBV-047, full node params and accumulated time in the parity reference | done | S / F |
 | WP-15 | Simulink goldens | todo | M+H / F |
@@ -63,6 +63,25 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 290 blocks. Per-block gate values are in the ledger; most V2-V8 cells are still 'todo' at block level because the family WPs record their evidence per finding and per test file, not per block (WP-23 final pass).
 
 ## Open findings by severity
+
+### S2 - crash, stop, freeze or silent no-op (2)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-414 | V5 | 4.5 solvers | Batch ode23 / ode45 reuse the first-same-as-last stage across a located event (AdaptiveSolver.ts ~354): RELAY and SWITCH driven by a sine integrate with errors -2.66e-5 to 1.47e-2 at default tolerances (oracles 1 and 1 - 4 asin(0.3)/pi). ode23tb and live are exact; the verifier's one-line probe (fresh k1 after an event) gives <= 2e-12. Pinned in xbEngineB (4 it.fails). Found by WP-13b. |
+| XBV-416 | V4 | 5.2 engine | Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite solution or the fatal ALGEBRAIC_LOOP_NOT_CONVERGED (Simulink stops on a loop it cannot solve). Pinned in xbEngineB (1 it.fails). Found by WP-13b. |
+
+### S3 - diagnostic, UI or convention deviation (1)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-415 | V5 | 4.5 solvers | Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u = t - 1, limit 0.5 at t = 1.5) holds the inside region for the whole step: error h^2/2 = 5e-5 on ode23 / ode45 / ode23tb; limit 1.505 is exact. Pinned in xbEngineB (6 it.fails). Found by WP-13b. |
+
+### S4 - documentation (1)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
 
 ## Closed, merged or superseded findings
 

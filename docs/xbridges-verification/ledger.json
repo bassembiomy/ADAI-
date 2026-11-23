@@ -454,7 +454,12 @@
    "deps": [
     "WP-13"
    ],
-   "status": "todo"
+   "status": "done",
+   "note": "xbEngineB.test.ts (217 tests: 206 pass, 11 it.fails pin XBV-414/415/416). Algebraic loops: algTol 1e-3/1e-6/1e-10 bounds, maxIter observable on a nonlinear loop (Newton rate 2/3), no-solution loop. Rate pairs 0.1/0.3, 0.2/0.5, 0.1/0.25, 0.01/0.07 both directions exact to 1e-12; RATE_TRANSITION_REQUIRED (warning) and SAMPLE_TIME_NOT_MULTIPLE_OF_FIXED_STEP (error) pinned; no sample-time offset or Rate Transition block exists. D2 blocks (SATURATION, DEADZONE, RELAY, SWITCH, Abs, 5 PWM carriers) against closed-form integrals under ode23/ode45/ode23tb batch and live, plus D15 fixed-step major-step modes. DOE: scan over every source in src/engine/doe, 41 codes / 58 recipes with severities (3 warnings in statistics.ts).",
+   "verification": {
+    "executor": "Sonnet",
+    "verifier": "Opus FAIL (DOE scan missed statistics.ts, 8 codes untested), PASS after rework 1 (206 passed / 11 it.fails twice; scan mutation-tested; findings reproduced with one-line probes)"
+   }
   },
   {
    "id": "WP-14",
@@ -2717,6 +2722,38 @@
    "status": "closed",
    "summary": "ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. Controller contract test: ROBOT_VACUUM_BATTERY, ROBOT_VACUUM_MAPPING, ROBOT_VACUUM_OBSTACLE_AVOIDANCE and ROBOT_VACUUM_SLAM execute write to a frozen state.",
    "fix": "WP-21 E9: ROBOT_VACUUM_BATTERY, MAPPING, OBSTACLE_AVOIDANCE and SLAM copy their state instead of writing it in place; contract test deep-freezes every block's state during a step. SLAM / MAPPING grids update once per major step (D18)."
+  },
+  {
+   "id": "XBV-414",
+   "plan_ref": "4.5 solvers",
+   "severity": "S2",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Batch ode23 / ode45 reuse the first-same-as-last stage across a located event (AdaptiveSolver.ts ~354): RELAY and SWITCH driven by a sine integrate with errors -2.66e-5 to 1.47e-2 at default tolerances (oracles 1 and 1 - 4 asin(0.3)/pi). ode23tb and live are exact; the verifier's one-line probe (fresh k1 after an event) gives <= 2e-12. Pinned in xbEngineB (4 it.fails). Found by WP-13b."
+  },
+  {
+   "id": "XBV-415",
+   "plan_ref": "4.5 solvers",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u = t - 1, limit 0.5 at t = 1.5) holds the inside region for the whole step: error h^2/2 = 5e-5 on ode23 / ode45 / ode23tb; limit 1.505 is exact. Pinned in xbEngineB (6 it.fails). Found by WP-13b."
+  },
+  {
+   "id": "XBV-416",
+   "plan_ref": "5.2 engine",
+   "severity": "S2",
+   "gate": "V4",
+   "status": "open",
+   "summary": "Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite solution or the fatal ALGEBRAIC_LOOP_NOT_CONVERGED (Simulink stops on a loop it cannot solve). Pinned in xbEngineB (1 it.fails). Found by WP-13b."
+  },
+  {
+   "id": "XBV-417",
+   "plan_ref": "5.2 engine",
+   "severity": "S4",
+   "gate": "V4",
+   "status": "open",
+   "summary": "algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b."
   }
  ],
  "blocks": {
