@@ -788,13 +788,31 @@ export class XbridgesEngine {
     let prev = snapshot();
     const start = prev;
     const maxPasses = this.options?.algMaxPasses ?? 50;
+    // Size of one sweep's change (scaled); a sweep only counts as converged when the change is also not growing
+    // (a contraction). A warm-started iterate whose first sweep barely moves can still sit far from the solution
+    // when the loop gain is large (|g| > 1): the next sweep then changes g times more, so it is not accepted.
+    const sweepChange = (a: any[], b: any[]): number => {
+      let m = 0;
+      const visit = (x: any, y: any) => {
+        if (typeof x === 'number' && typeof y === 'number') {
+          if (x !== y) m = Math.max(m, Math.abs(x - y) / (1 + Math.abs(y)));
+        } else if (Array.isArray(x) && Array.isArray(y)) x.forEach((v, i) => visit(v, y[i]));
+        else if (x && y && typeof x === 'object' && typeof y === 'object') Object.keys(x).forEach(k => visit(x[k], y[k]));
+      };
+      a.forEach((v, i) => visit(v, b[i]));
+      return m;
+    };
+    let prevChange = Infinity;
     for (let pass = 0; pass < maxPasses; pass++) {
       this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
       const cur = snapshot();
       // A diverged sweep (Infinity / NaN) is never a settled loop: Newton restarts from the pre-sweep values.
       if (!cur.every(isFiniteValue)) break;
-      const settled = cur.every((v, i) => settledValue(v, prev[i]));
+      const change = sweepChange(cur, prev);
+      const settled = cur.every((v, i) => settledValue(v, prev[i]))
+        && (change === 0 || (pass >= 1 && change <= prevChange));
       prev = cur;
+      prevChange = change;
       if (settled) return;
     }
 
