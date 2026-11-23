@@ -660,7 +660,13 @@ export class StiffSolver {
       }
       const remaining = target - t;
       let hTry = sliver ? remaining : Math.min(h, hMax, remaining);
-      if (!sliver && remaining - hTry < hMin) hTry = remaining <= hMax ? remaining : remaining / 2;
+      if (!sliver && remaining - hTry < hMin) {
+        // A remainder below minStep is merged into this step when it fits maxStep (up to rounding drift of the time sum, XBV-428),
+        // else the step is halved; if the half would fall below minStep, the full step is taken and the last step before the
+        // target is the short one (it may be shorter than minStep).
+        if (remaining <= hMax * (1 + 1e-9)) hTry = remaining;
+        else if (remaining / 2 >= hMin) hTry = remaining / 2;
+      }
       if (!sliver && hTry < hMin && hTry < remaining) {
         reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL', `ode23tb step size fell below minStep (${hMin}) at t=${t}.`);
         break;

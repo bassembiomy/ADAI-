@@ -57,7 +57,7 @@ interface Tableau {
 }
 
 const TAB_DP: Tableau = { c: C_DP, a: A_DP, b: B5_DP, e: E_DP, acceptExponent: -0.2, rejectExponent: -0.25 };
-const TAB_BS: Tableau = { c: C_BS, a: A_BS, b: B3_BS, e: E_BS, acceptExponent: -0.3333, rejectExponent: -0.5 };
+const TAB_BS: Tableau = { c: C_BS, a: A_BS, b: B3_BS, e: E_BS, acceptExponent: -1 / 3, rejectExponent: -0.5 };
 
 interface IntegrateConfig {
   relTol: number;
@@ -99,7 +99,7 @@ export function stepLimitProblem(minStep: number | undefined, maxStep: number | 
 
 /**
  * Initial step of a variable-step Runge-Kutta run (Hairer, Norsett, Wanner, "Solving ODEs I", II.4, as used by MATLAB ode45
- * and ode23 and by Simulink at the start and after a reset): h = 1 / ||f0 / max(|y0|, AbsTol / RelTol)||_inf / (0.8 RelTol^(1/q)),
+ * and ode23 and by Simulink at the start of a run; this core does not recompute it after an event or reset: the step then follows the error control): h = 1 / ||f0 / max(|y0|, AbsTol / RelTol)||_inf / (0.8 RelTol^(1/q)),
  * limited to the interval. q is the order of the error estimate (ode45: 5, ode23: 3). 'Infinity' when f0 is zero.
  */
 function initialStep(engine: XbridgesEngine, tab: Tableau, k1: Map<string, any>, relTol: number, absTol: number): number {
