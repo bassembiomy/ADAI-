@@ -589,7 +589,12 @@
    "deps": [
     "WP-17"
    ],
-   "status": "todo"
+   "status": "done",
+   "note": "xbCodeParityB.test.ts (676 passed incl. 6 it.fails, 1 skipped, about 40 s). Float32 profile: per-block parity interpreter vs generated C under euler / rk4 / discrete, both sides really float32 (0.1 accumulated 400 ticks matches a hand Math.fround sequence); non-libm blocks exact (0 ULP), libm blocks <= 1 float32 ULP, KALMAN_FILTER vector-wise bound (XBV-432). Sanitizers: gcc ASan + UBSan with a live canary on 13 block models, hybridXBridgesFixture and 7 HIL configurations, 400 ticks, clean; clang UBSan trap clean; clang ASan / MSan skipped (runtimes not installed). Diag (D17): MatrixDiag, Diag, DiagExtract, ExtractDiag on the canvas, MatrixDiag in interpreter and C, float64 and float32 with inexact inputs, non-square min(m, n).",
+   "verification": {
+    "executor": "Sonnet",
+    "verifier": "Opus FAIL (4-ULP libm tolerance chosen per model let +2 ULP shifts pass 234/284; loose Kalman and near-zero bounds; Diag inputs exact in float32), PASS after rework 1 (+1 ULP on non-libm fails 188/188, +2 ULP on libm fails 90/90, Diag oracle without fround fails)"
+   }
   },
   {
    "id": "WP-18",
@@ -2890,6 +2895,38 @@
    "gate": "V4",
    "status": "open",
    "summary": "Far roots are not reached from a zero start: y = 1 + y - k y^2 for k = 1e-14..1e-20 (roots 1e7..1e10), y = 1e12 + y - y^2 (roots +-1e6) and y = 1e-6 + y - 1e-12 y^2 give a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0 (honest, same as before E12). Simulink's trust-region dogleg would reach them; a general fix needs a globalised solver. Found by the E12 verifier."
+  },
+  {
+   "id": "XBV-432",
+   "plan_ref": "7.1 code parity",
+   "severity": "S3",
+   "gate": "V7",
+   "status": "open",
+   "summary": "KALMAN_FILTER float32: the embedded interpreter stores x and P without convertValue (xbInterpreter.ts ~1749-1750), the generated C stores them as float; the state differs by one float32 rounding per tick, coupled through A (2.5 x 2^-24 max|x|), and the innovation (a cancellation) by up to 869 float32 ULP. Pinned in xbCodeParityB (it.fails per solver). Found by WP-17b."
+  },
+  {
+   "id": "XBV-433",
+   "plan_ref": "7.1 code parity",
+   "severity": "S4",
+   "gate": "V7",
+   "status": "open",
+   "summary": "VectorPow float32 emits powf((double)a, (double)b) (xbCGenerator.ts emitVectorElementwisePower ~1190): the strict compile fails with -Werror=float-conversion; exact for float32 inputs but would narrow a float64 input silently. Pinned in xbCodeParityB. Found by WP-17b."
+  },
+  {
+   "id": "XBV-434",
+   "plan_ref": "7.1 code parity",
+   "severity": "S2",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Float32 signals are computed in double and rounded once per signal / state write, in both the interpreter and the generated C (e.g. const double v = (double)a + (double)b + (double)c; out = (float)v). Simulink 'single' and Embedded Coder compute in float and round every operation: Sum +++ of 16777216, 1, 1 gives 16777218 here and 16777216 in Simulink; also multi-operation blocks (Product, matrix products, filters, PID, integrator x + dt u) and libm (sinf vs (float)sin). On a single-precision FPU (Cortex-M4F) the double arithmetic is emulated in software. Needs a decision: follow Simulink (engine + generator change) or document as a deliberate profile. Found by the WP-17b verifier."
+  },
+  {
+   "id": "XBV-435",
+   "plan_ref": "7.1 code parity",
+   "severity": "S4",
+   "gate": "V7",
+   "status": "open",
+   "summary": "Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refused (XB_SHAPE_MISMATCH) although the capability says allShapes. Also: the float32 innovation output has no passing assertion (only the it.fails), and SIN / COSEC are checked at 0 ULP because the stimulus baseline contains sin (stricter, may fail on another libm). Found by WP-17b and its verifier."
   }
  ],
  "blocks": {

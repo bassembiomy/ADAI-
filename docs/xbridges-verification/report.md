@@ -4,12 +4,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 24 done of 29; 2 in progress; 3 to do.
-- Findings: 5 open, 238 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Work packages: 25 done of 29; 2 in progress; 2 to do.
+- Findings: 9 open, 238 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 2 open
-  - S4 (documentation): 3 open
+  - S2 (crash, stop, freeze or silent no-op): 1 open
+  - S3 (diagnostic, UI or convention deviation): 3 open
+  - S4 (documentation): 5 open
 - Decisions recorded: 19; open: 0.
 
 ## Work packages
@@ -38,7 +38,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-15 | Simulink goldens | todo | M+H / F |
 | WP-16 | Canvas / interpreter parity and model corpus | done | S (harness + tests from controller spec, D7) / F (Opus, D8) |
 | WP-17 | Per-block code parity, registry closure, compile matrix, limits | done | S (harness + tests from controller spec, D7) / F (Opus, D8) |
-| WP-17b | Code parity part B: float32 production profile (per-block parity with float32 tolerances), clang sanitizers with runtime, DiagExtract/ExtractDiag/Diag | todo | S / F |
+| WP-17b | Code parity part B: float32 production profile (per-block parity with float32 tolerances), clang sanitizers with runtime, DiagExtract/ExtractDiag/Diag | done | S / F |
 | WP-18 | State-machine alignment incl. AUTOSAR path | done | S (tests from controller spec, D7) / F (Opus, D8) |
 | WP-19 | UI component tests | done | S / F |
 | WP-20 | UI end-to-end | done | S / F |
@@ -64,20 +64,29 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S3 - diagnostic, UI or convention deviation (2)
+### S2 - crash, stop, freeze or silent no-op (1)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-434 | V7 | 7.1 code parity | Float32 signals are computed in double and rounded once per signal / state write, in both the interpreter and the generated C (e.g. const double v = (double)a + (double)b + (double)c; out = (float)v). Simulink 'single' and Embedded Coder compute in float and round every operation: Sum +++ of 16777216, 1, 1 gives 16777218 here and 16777216 in Simulink; also multi-operation blocks (Product, matrix products, filters, PID, integrator x + dt u) and libm (sinf vs (float)sin). On a single-precision FPU (Cortex-M4F) the double arithmetic is emulated in software. Needs a decision: follow Simulink (engine + generator change) or document as a deliberate profile. Found by the WP-17b verifier. |
+
+### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. |
 | XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. |
+| XBV-432 | V7 | 7.1 code parity | KALMAN_FILTER float32: the embedded interpreter stores x and P without convertValue (xbInterpreter.ts ~1749-1750), the generated C stores them as float; the state differs by one float32 rounding per tick, coupled through A (2.5 x 2^-24 max\|x\|), and the innovation (a cancellation) by up to 869 float32 ULP. Pinned in xbCodeParityB (it.fails per solver). Found by WP-17b. |
 
-### S4 - documentation (3)
+### S4 - documentation (5)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
 | XBV-430 | V4 | 5.2 engine | The E12 isRoot guard multiplies the rounding term 64 eps max(\|z\|, \|F\|) by (1 + \|z\|), so its slack grows with \|z\|^2 and exceeds the algTol term above \|z\| ~ 7e7. No probe got through (a singular Jacobian never yields a reliable step), but the bound should be algTol (1 + \|z\|) + 64 eps max(\|z\|, \|F\|). Found by the E12 verifier. |
 | XBV-431 | V4 | 5.2 engine | Far roots are not reached from a zero start: y = 1 + y - k y^2 for k = 1e-14..1e-20 (roots 1e7..1e10), y = 1e12 + y - y^2 (roots +-1e6) and y = 1e-6 + y - 1e-12 y^2 give a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0 (honest, same as before E12). Simulink's trust-region dogleg would reach them; a general fix needs a globalised solver. Found by the E12 verifier. |
+| XBV-433 | V7 | 7.1 code parity | VectorPow float32 emits powf((double)a, (double)b) (xbCGenerator.ts emitVectorElementwisePower ~1190): the strict compile fails with -Werror=float-conversion; exact for float32 inputs but would narrow a float64 input silently. Pinned in xbCodeParityB. Found by WP-17b. |
+| XBV-435 | V7 | 7.1 code parity | Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refused (XB_SHAPE_MISMATCH) although the capability says allShapes. Also: the float32 innovation output has no passing assertion (only the it.fails), and SIN / COSEC are checked at 0 ULP because the stimulus baseline contains sin (stricter, may fail on another libm). Found by WP-17b and its verifier. |
 
 ## Closed, merged or superseded findings
 
