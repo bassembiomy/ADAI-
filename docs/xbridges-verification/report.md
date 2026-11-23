@@ -4,11 +4,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 24 done of 29; 1 in progress; 4 to do.
-- Findings: 4 open, 225 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Work packages: 23 done of 29; 2 in progress; 4 to do.
+- Findings: 4 open, 228 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 2 open
-  - S3 (diagnostic, UI or convention deviation): 1 open
+  - S2 (crash, stop, freeze or silent no-op): 0 open
+  - S3 (diagnostic, UI or convention deviation): 3 open
   - S4 (documentation): 1 open
 - Decisions recorded: 18; open: 0.
 
@@ -42,7 +42,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-18 | State-machine alignment incl. AUTOSAR path | done | S (tests from controller spec, D7) / F (Opus, D8) |
 | WP-19 | UI component tests | done | S / F |
 | WP-20 | UI end-to-end | done | S / F |
-| WP-21 | Fix loop, one commit per finding | done | S / H, verifier opus |
+| WP-21 | Fix loop, one commit per finding | in_progress | S / H, verifier opus |
 | WP-22 | CI workflow, nightly random graphs, mutation run | in_progress | H / F |
 | WP-23 | Close-out report | todo | O / F |
 
@@ -64,18 +64,13 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S2 - crash, stop, freeze or silent no-op (2)
+### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-414 | V5 | 4.5 solvers | Batch ode23 / ode45 reuse the first-same-as-last stage across a located event (AdaptiveSolver.ts ~354): RELAY and SWITCH driven by a sine integrate with errors -2.66e-5 to 1.47e-2 at default tolerances (oracles 1 and 1 - 4 asin(0.3)/pi). ode23tb and live are exact; the verifier's one-line probe (fresh k1 after an event) gives <= 2e-12. Pinned in xbEngineB (4 it.fails). Found by WP-13b. |
-| XBV-416 | V4 | 5.2 engine | Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite solution or the fatal ALGEBRAIC_LOOP_NOT_CONVERGED (Simulink stops on a loop it cannot solve). Pinned in xbEngineB (1 it.fails). Found by WP-13b. |
-
-### S3 - diagnostic, UI or convention deviation (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-415 | V5 | 4.5 solvers | Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u = t - 1, limit 0.5 at t = 1.5) holds the inside region for the whole step: error h^2/2 = 5e-5 on ode23 / ode45 / ode23tb; limit 1.505 is exact. Pinned in xbEngineB (6 it.fails). Found by WP-13b. |
+| XBV-418 | V4 | 5.2 engine | Algebraic loop y = 1 + 1e10 y under rk4: from step 2 the loop value is -8.27e-8 (exact -1e-10) and the gain output -827 (exact -1), no diagnostic; ode45 is exact. The loop value meets algTol*(1+\|y\|), but with gain 1e10 the residual test accepts a value 827x off (ill-conditioning: the convergence test should be on the residual scaled by the loop gain, or warn). Before E10 the result was Infinity. Found by the E10 verifier. |
+| XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. |
+| XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. |
 
 ### S4 - documentation (1)
 
@@ -310,6 +305,9 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-411 (closed): Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.00
 - XBV-412 (closed): The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window f
 - XBV-413 (closed): ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so it
+- XBV-414 (closed): Batch ode23 / ode45 reuse the first-same-as-last stage across a located event (AdaptiveSolver.ts ~354): RELAY and SWITCH driven by a sine integrate with errors -2.66e-5 to 1.47e-2 at default tolerance
+- XBV-415 (closed): Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u
+- XBV-416 (closed): Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite sol
 
 ## Decisions
 

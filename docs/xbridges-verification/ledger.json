@@ -640,8 +640,8 @@
    "title": "Fix loop, one commit per finding",
    "exec": "S / H, verifier opus",
    "deps": [],
-   "status": "done",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179). Batch J merged (5 findings closed, XBV-037 partly; new XBV-180 to 183). Batch E9 merged (4c4a685f) after 2 reworks and verifier PASS: XBV-409, 410, 411, 412, 413 closed; decision D18; nextEventTime block contract (scheduled events), Round8 / Round9 exact-integral acceptance. Performance note: 20 kHz PWM for 1 s takes 7-10 s on the verifier's machine with ode45 (accurate; the base was faster only because it skipped pulses); 5 carriers at 1000-1004 Hz take 15-24 s per simulated second. No open findings left in WP-21."
+   "status": "in_progress",
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179). Batch J merged (5 findings closed, XBV-037 partly; new XBV-180 to 183). Batch E9 merged (4c4a685f) after 2 reworks and verifier PASS: XBV-409, 410, 411, 412, 413 closed; decision D18; nextEventTime block contract (scheduled events), Round8 / Round9 exact-integral acceptance. Performance note: 20 kHz PWM for 1 s takes 7-10 s on the verifier's machine with ode45 (accurate; the base was faster only because it skipped pulses); 5 carriers at 1000-1004 Hz take 15-24 s per simulated second. No open findings left in WP-21. Batch E10 merged after verifier PASS: XBV-414, 415, 416 closed (from WP-13b); new XBV-418 (rk4 loop gain 1e10 accuracy), XBV-419 / 420 (tangent touches, oracle to confirm in WP-15). 20 kHz PWM ode45 about 13 % slower (fresh first stage once per event)."
   },
   {
    "id": "WP-22",
@@ -2728,24 +2728,27 @@
    "plan_ref": "4.5 solvers",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "Batch ode23 / ode45 reuse the first-same-as-last stage across a located event (AdaptiveSolver.ts ~354): RELAY and SWITCH driven by a sine integrate with errors -2.66e-5 to 1.47e-2 at default tolerances (oracles 1 and 1 - 4 asin(0.3)/pi). ode23tb and live are exact; the verifier's one-line probe (fresh k1 after an event) gives <= 2e-12. Pinned in xbEngineB (4 it.fails). Found by WP-13b."
+   "status": "closed",
+   "summary": "Batch ode23 / ode45 reuse the first-same-as-last stage across a located event (AdaptiveSolver.ts ~354): RELAY and SWITCH driven by a sine integrate with errors -2.66e-5 to 1.47e-2 at default tolerances (oracles 1 and 1 - 4 asin(0.3)/pi). ode23tb and live are exact; the verifier's one-line probe (fresh k1 after an event) gives <= 2e-12. Pinned in xbEngineB (4 it.fails). Found by WP-13b.",
+   "fix": "WP-21 E10: the first stage is re-evaluated after a landed event (k1Valid false after a sliver step that reaches the event); batch ode23 / ode45 RELAY and SWITCH errors 2.7e-5..1.5e-2 -> 1e-13..2e-12; a crossing landing exactly on a normal step end goes the same way (-2.58e-4 -> 4.6e-13)."
   },
   {
    "id": "XBV-415",
    "plan_ref": "4.5 solvers",
    "severity": "S3",
    "gate": "V5",
-   "status": "open",
-   "summary": "Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u = t - 1, limit 0.5 at t = 1.5) holds the inside region for the whole step: error h^2/2 = 5e-5 on ode23 / ode45 / ode23tb; limit 1.505 is exact. Pinned in xbEngineB (6 it.fails). Found by WP-13b."
+   "status": "closed",
+   "summary": "Live variable-step: a zero crossing whose step starts exactly on the crossing (base value exactly 0) is skipped (zeroCrossingGuard.ts ~31), so DEADZONE with its limit hit exactly on the output grid (u = t - 1, limit 0.5 at t = 1.5) holds the inside region for the whole step: error h^2/2 = 5e-5 on ode23 / ode45 / ode23tb; limit 1.505 is exact. Pinned in xbEngineB (6 it.fails). Found by WP-13b.",
+   "fix": "WP-21 E10: crossedOrTouched counts a zero base value followed by a finite non-zero value; live DEADZONE on the grid -5e-5 -> 3.5e-16; no double count (steps land past hi + 2 tol), no chatter on touches or functions resting at 0."
   },
   {
    "id": "XBV-416",
    "plan_ref": "5.2 engine",
    "severity": "S2",
    "gate": "V4",
-   "status": "open",
-   "summary": "Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite solution or the fatal ALGEBRAIC_LOOP_NOT_CONVERGED (Simulink stops on a loop it cannot solve). Pinned in xbEngineB (1 it.fails). Found by WP-13b."
+   "status": "closed",
+   "summary": "Algebraic loop y = 1 + g y with g = 1e10 or 1e300 (finite solution -1/(g-1)) returns Infinity with only ALGEBRAIC_LOOP and NUMERICAL_INSTABILITY warnings and the run continues; expected the finite solution or the fatal ALGEBRAIC_LOOP_NOT_CONVERGED (Simulink stops on a loop it cannot solve). Pinned in xbEngineB (1 it.fails). Found by WP-13b.",
+   "fix": "WP-21 E10: a non-finite Gauss-Seidel sweep falls back to Newton from the pre-sweep values, the finite-difference step scales with max(1, |z|), a non-finite F or z is a fatal ALGEBRAIC_LOOP_NOT_CONVERGED; y = 1 + g y gives -1/(g-1) for g = 1e10 and 1e300; nonlinear loops y = C - k y^2 (C up to 1e12) within 1.2e-7 where the base gave Infinity."
   },
   {
    "id": "XBV-417",
@@ -2754,6 +2757,30 @@
    "gate": "V4",
    "status": "open",
    "summary": "algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b."
+  },
+  {
+   "id": "XBV-418",
+   "plan_ref": "5.2 engine",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "Algebraic loop y = 1 + 1e10 y under rk4: from step 2 the loop value is -8.27e-8 (exact -1e-10) and the gain output -827 (exact -1), no diagnostic; ode45 is exact. The loop value meets algTol*(1+|y|), but with gain 1e10 the residual test accepts a value 827x off (ill-conditioning: the convergence test should be on the residual scaled by the loop gain, or warn). Before E10 the result was Infinity. Found by the E10 verifier."
+  },
+  {
+   "id": "XBV-419",
+   "plan_ref": "4.5 solvers",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10."
+  },
+  {
+   "id": "XBV-420",
+   "plan_ref": "4.5 solvers",
+   "severity": "S3",
+   "gate": "V5",
+   "status": "open",
+   "summary": "DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10."
   }
  ],
  "blocks": {
