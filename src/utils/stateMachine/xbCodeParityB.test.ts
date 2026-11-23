@@ -354,10 +354,8 @@ const runF32 = async (type: string, solver: EmbeddedSolver): Promise<F32Outcome>
 
 /** Pins found by the first run of this file (never edited into the expectations): key type|solver -> finding text. */
 const F32_PINS: Record<string, string> = {};
-const F32_STRICT_PINS: Record<string, string> = Object.fromEntries(['euler', 'rk4', 'discrete'].map((solver) => [
-  `VectorPow|${solver}`,
-  'VectorPow float32 emits powf((double)a, (double)b): -Wconversion rejects the implicit double -> float narrowing of both arguments (sm_core.c, xbCGenerator.ts emitVectorElementwisePower); exact only because the inputs are already float32, a float64 input would be silently narrowed',
-]));
+// XBV-433: VectorPow float32 must compile strictly (no implicit double -> float narrowing); no strict-compile pins remain.
+const F32_STRICT_PINS: Record<string, string> = {};
 
 const F32_CASES = TYPES.flatMap((type) => SOLVERS.filter((s) => !(s === 'discrete' && hasContinuous(type))).map((solver) => ({ type, solver })));
 const f32Results = new Map<string, F32Outcome>();
@@ -411,7 +409,9 @@ describe('V7B-1 float32 production profile: interpreter = generated C per block 
     };
     if (F32_PINS[key]) it.fails(`FINDING CANDIDATE: ${F32_PINS[key]} (${title})`, body); else it(title, body);
     if (STATE_ROUNDING_TYPES.has(type)) {
-      it.fails(`FINDING CANDIDATE: ${type} float32 interpreter keeps the state x, P in float64 (xbInterpreter.ts ~1750 writes runtime.stateSlots without convertValue) while the generated C stores them as float: the plain <= 4 ULP check fails (${type} ${solver})`, () => {
+      // XBV-432: the interpreter rounds the float32 state x, P as the generated C stores it, so every output, the innovation included,
+      // is within the plain <= 4 ULP check.
+      it(`${type} float32 state x, P rounded on both sides: every output within 4 ULP, innovation included (XBV-432, ${type} ${solver})`, () => {
         const o = f32Results.get(key)!;
         if (o.plainDetail !== '') expect.fail(o.plainDetail);
       });
