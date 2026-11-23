@@ -5,7 +5,7 @@ import { VectorUtils } from './VectorUtils';
 import { AdaptiveSolver } from './AdaptiveSolver';
 import { StiffSolver } from './StiffSolver';
 import { resolveSimulationConfig } from './simulationConfig';
-import { runBatchSolver, reportUnsupportedSolver } from './liveStep';
+import { runBatchSolver, reportUnsupportedSolver, canonicalSolver } from './liveStep';
 
 // Dormand-Prince coefficients for ODE5 fixed step
 const C_DP = [0, 1/5, 3/10, 4/5, 8/9, 1, 1];
@@ -384,6 +384,9 @@ export class Solvers {
 
   static runFixedStep(engine: XbridgesEngine, options: SolverOptions) {
       engine.options = options;
+      // A fixed step the user gave is kept for ode23 / ode45 as their first step; 'auto' / unset leaves the first step to the
+      // MATLAB initial-step heuristic (XBV-429). The resolved step still defines the output grid (engine.options).
+      const userFixedStep = typeof options.fixedStep === 'number' && Number.isFinite(options.fixedStep) && options.fixedStep > 0;
       // Resolve start/stop/fixed step ('auto') the way Simulink's Solver pane does.
       engine.compile(options.startTime);
       const resolved = resolveSimulationConfig(
@@ -412,7 +415,9 @@ export class Solvers {
       if (compileDiagnostics.some(d => d.severity === 'error')) return;
 
       // One dispatch for canvas, worker and batch (liveStep.ts); an unknown name is refused, never run as Euler.
-      if (!runBatchSolver(engine, options.solver as string, options)) reportUnsupportedSolver(engine, options.solver);
+      const canon = canonicalSolver(options.solver);
+      const solverOptions = !userFixedStep && (canon === 'ode45' || canon === 'ode23') ? { ...options, fixedStep: undefined } : options;
+      if (!runBatchSolver(engine, options.solver as string, solverOptions)) reportUnsupportedSolver(engine, options.solver);
   }
 
   // ODE14x: implicit extrapolation (stiff), single step for the live canvas worker
