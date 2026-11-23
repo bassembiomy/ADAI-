@@ -890,7 +890,7 @@ export class XbridgesEngine {
     const residualOf = (zv: number[], fv: number[]) => zv.map((zi, i) => zi - fv[i]);
     // dF/dz by central differences, h and 2h combined (error O(h^4), no truncation error for a cubic); falls back to
     // the single central, then the forward difference when F is not finite at the wider points. null: not finite.
-    const jacobianOf = (zv: number[], fv: number[], rich: boolean): number[][] | null => {
+    const jacobianOf = (zv: number[], fv: number[], rich: boolean, denoise = false): number[][] | null => {
       const J: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
       for (let j = 0; j < n; j++) {
         const h = (rich ? 1e-4 : 1e-5) * Math.max(1, Math.abs(zv[j]));
@@ -907,17 +907,48 @@ export class XbridgesEngine {
           if (finite(pf)) col = pf.map((v, i) => (v - fv[i]) / hf);
         }
         if (!col || !finite(col)) return null;
-        for (let i = 0; i < n; i++) J[i][j] = (i === j ? 1 : 0) - col[i];
+        for (let i = 0; i < n; i++) {
+          J[i][j] = (i === j ? 1 : 0) - col[i];
+          // An entry within the rounding noise of the difference quotient, 32 eps |F_i| / h, cannot be told from zero.
+          if (denoise && Math.abs(J[i][j]) <= (32 * 2.220446049250313e-16 * Math.abs(fv[i])) / ((rich ? 1e-4 : 1e-5) * Math.max(1, Math.abs(zv[j])))) J[i][j] = 0;
+        }
       }
       return J;
     };
     // Newton direction; a singular Jacobian gives a Levenberg-Marquardt (damped least-squares) direction instead;
     // null when even that has no direction (zero Jacobian: a stationary point of |g|).
-    const directionOf = (J: number[][], g: number[]): { dz: number[]; newton: boolean } | null => {
-      try {
-        const dZ = math.flatten(math.lusolve(J, g.map(v => -v))) as number[];
-        if (finite(dZ)) return { dz: dZ, newton: true };
-      } catch (err) { /* singular: damped step below */ }
+    // Gaussian elimination with partial pivoting; singular only when a pivot is exactly zero (math.lusolve also refuses a
+    // pivot below its relative tolerance, which hides a Jacobian whose determinant is small but resolvable, e.g. 2 k z).
+    const solveExact = (A: number[][], b: number[]): number[] | null => {
+      const M = A.map((row, i) => [...row, b[i]]);
+      for (let c = 0; c < n; c++) {
+        let piv = c;
+        for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+        if (M[piv][c] === 0 || !Number.isFinite(M[piv][c])) return null;
+        [M[c], M[piv]] = [M[piv], M[c]];
+        for (let r = c + 1; r < n; r++) {
+          const f = M[r][c] / M[c][c];
+          if (f !== 0) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+        }
+      }
+      const x = new Array(n).fill(0);
+      for (let r = n - 1; r >= 0; r--) {
+        let acc = M[r][n];
+        for (let k = r + 1; k < n; k++) acc -= M[r][k] * x[k];
+        x[r] = acc / M[r][r];
+      }
+      return finite(x) ? x : null;
+    };
+    const directionOf = (J: number[][], g: number[], exact = false): { dz: number[]; newton: boolean } | null => {
+      if (exact) {
+        const x = solveExact(J, g.map(v => -v));
+        if (x) return { dz: x, newton: true };
+      } else {
+        try {
+          const dZ = math.flatten(math.lusolve(J, g.map(v => -v))) as number[];
+          if (finite(dZ)) return { dz: dZ, newton: true };
+        } catch (err) { /* singular: damped step below */ }
+      }
       try {
         const JtJ = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, c) => J.reduce((acc, row) => acc + row[a] * row[c], 0)));
         const maxDiag = Math.max(...JtJ.map((row, i) => row[i]));
@@ -933,7 +964,7 @@ export class XbridgesEngine {
     const isRoot = (zb: number[]): boolean => {
       const fb = evaluateF(zb);
       if (!finite(fb)) return false;
-      return zb.every((zi, i) => Math.abs(zi - fb[i]) <= (algTol + 64 * 2.220446049250313e-16 * Math.max(Math.abs(zi), Math.abs(fb[i]))) * (1 + Math.abs(zi)));
+      return zb.every((zi, i) => Math.abs(zi - fb[i]) <= algTol * (1 + Math.abs(zi)) + 64 * 2.220446049250313e-16 * Math.max(Math.abs(zi), Math.abs(fb[i])));
     };
     const finalize = (zf: number[]) => {
       evaluateF(zf);
@@ -941,130 +972,213 @@ export class XbridgesEngine {
     };
 
     const HUGE_STEP = 1e8;
-    let pert = 1e-2; // start-point perturbation, relative to 1 + |z|
-    const RESOLVED = 1e-9; // below this scaled residual the rounding of F dominates g and the measured step is noise
-    let z = getZ();
-    let fz: number[] | null = null;
-    let prevStep: number | null = null; // size (max-norm) of the previous full Newton step (null after a damped / perturbed step)
-    let prevStepRel = 0; // the same, scaled by 1 + |z|
-    let prevRate: number | null = null; // ratio of the previous two Newton steps
-    let best: { z: number[]; u: number } | null = null; // best estimate of the solution and its uncertainty
-    const consider = (zc: number[], u: number) => { if (finite(zc) && (!best || u <= best.u)) best = { z: zc, u }; };
-    const absNorm = (v: number[]) => v.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+    let lastZ: number[] = getZ();
+    let lastK = 0; // iterations used by the last Newton run
+    let stalled = false; // the last Newton run gave up on a stationary start (a zero Jacobian), not on the iteration limit
+    const newton = (zStart: number[], limit: number, denoise = false): boolean => {
+      stalled = false;
+      let pert = 1e-2; // start-point perturbation, relative to 1 + |z|
+      const RESOLVED = 1e-9; // below this scaled residual the rounding of F dominates g and the measured step is noise
+      let z = zStart.slice();
+      let fz: number[] | null = null;
+      let prevStep: number | null = null; // size (max-norm) of the previous full Newton step (null after a damped / perturbed step)
+      let prevStepRel = 0; // the same, scaled by 1 + |z|
+      let prevRate: number | null = null; // ratio of the previous two Newton steps
+      let best: { z: number[]; u: number } | null = null; // best estimate of the solution and its uncertainty
+      const consider = (zc: number[], u: number) => { if (finite(zc) && (!best || u <= best.u)) best = { z: zc, u }; };
+      const absNorm = (v: number[]) => v.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 
-    for (let k = 0; k <= maxIter; k++) {
-      let stepSize: number; // max-norm of the step, rates are ratios of these
-      let stepRel: number; // scaled by 1 + |z|, compared with algTol
-      let rate: number | null;
-      let dz: number[] | null = null;
-      let newtonStep = true;
-      let resolved = true;
-      if (fz === null) fz = evaluateF(z);
-      if (!finite(fz) || !finite(z)) { reportNotConverged(); return; }
-      const g = residualOf(z, fz);
-      const gRel = relNorm(g, z);
-      const gAbs = absNorm(g);
-      if (gRel === 0) { finalize(z); return; }
-      // Resolved: the residual is well above the rounding noise of F, which scales with max(1, |z|, |F|).
-      resolved = g.some((gi, i) => Math.abs(gi) / Math.max(1, Math.abs(z[i]), Math.abs(fz![i])) > RESOLVED);
+      for (let k = 0; k <= limit; k++) {
+        let stepSize: number; // max-norm of the step, rates are ratios of these
+        let stepRel: number; // scaled by 1 + |z|, compared with algTol
+        let rate: number | null;
+        let dz: number[] | null = null;
+        let newtonStep = true;
+        let resolved = true;
+        if (fz === null) fz = evaluateF(z);
+        if (!finite(fz) || !finite(z)) { lastZ = finite(z) ? z : zStart; lastK = k; stalled = true; return false; }
+        const g = residualOf(z, fz);
+        const gRel = relNorm(g, z);
+        const gAbs = absNorm(g);
+        if (gRel === 0) { finalize(z); return true; }
+        // Resolved: the residual is well above the rounding noise of F, which scales with max(1, |z|, |F|).
+        resolved = g.some((gi, i) => Math.abs(gi) / Math.max(1, Math.abs(z[i]), Math.abs(fz![i])) > RESOLVED);
 
-      {
-        // Central differences (2n evaluations); the Richardson combination (4n) only where the cheap Jacobian is not
-        // enough: slow convergence (rate >= 0.5, e.g. a multiple root) or an ill-conditioned / singular system.
-        let J = jacobianOf(z, fz, prevRate !== null && prevRate >= 0.5);
-        let dir = J ? directionOf(J, g) : null;
-        if (!dir || !dir.newton) {
-          J = jacobianOf(z, fz, true);
-          dir = J ? directionOf(J, g) : null;
+        {
+          // Central differences (2n evaluations); the Richardson combination (4n) only where the cheap Jacobian is not
+          // enough: slow convergence (rate >= 0.5, e.g. a multiple root) or an ill-conditioned / singular system.
+          let J = jacobianOf(z, fz, prevRate !== null && prevRate >= 0.5, denoise);
+          let dir = J ? directionOf(J, g, denoise) : null;
+          if (!dir || !dir.newton) {
+            J = jacobianOf(z, fz, true, denoise);
+            dir = J ? directionOf(J, g, denoise) : null;
+          }
+          if (!dir || (!dir.newton && relNorm(dir.dz, z) <= 1e-12)) {
+            // Singular or zero Jacobian (or a damped step that no longer moves the iterate: a stationary point of |g|) at this point (e.g. dF/dz = 0 at the start guess): move off the stationary point.
+            if (k === limit) break;
+            if (pert >= 1 && k < limit) { lastZ = z; lastK = k; stalled = true; return false; }
+            z = z.map(v => v + pert * (1 + Math.abs(v)));
+            pert = Math.min(pert * 10, 1e12); // consecutive perturbations grow geometrically to reach far roots
+            fz = null; prevStep = null; prevRate = null;
+            continue;
+          }
+          dz = dir.dz;
+          newtonStep = dir.newton;
+          stepSize = absNorm(dz);
+          stepRel = relNorm(dz, z);
+          rate = newtonStep && prevStep !== null && prevStep > 0 ? stepSize / prevStep : null;
         }
-        if (!dir) {
-          // Singular or zero Jacobian at this point (e.g. dF/dz = 0 at the start guess): move off the stationary point.
-          if (k === maxIter) break;
+
+        // A step at rounding level (about 50 ulp) cannot shrink further: the iteration sits at the floor of double precision.
+        const atFloor = newtonStep && stepRel <= 1e-14;
+        // The step-size test applies to full Newton steps only; a damped (Levenberg-Marquardt) step is small by construction.
+        // A step more than 1e9 times the residual comes from a Jacobian below the noise of the finite differences (the
+        // loop is singular to working precision): such a step says nothing about the solution.
+        const reliable = newtonStep && stepSize <= 1e9 * gAbs;
+        if (reliable && ((rate !== null && rate < 1) || atFloor)) {
+          const r = atFloor || rate === null ? 0 : rate;
+          const rEff = Math.max(r, prevRate ?? 0);
+          const err = atFloor ? 0 : rEff < 1 ? (stepRel * rEff) / (1 - rEff) : Infinity;
+          if (dz) {
+            const zc = z.map((v, i) => v + dz![i]);
+            consider(zc, err);
+            // Aitken limit of the geometric tail; its uncertainty is the drift of the rate.
+            consider(z.map((v, i) => v + dz![i] / (1 - r)), (stepRel * Math.abs(r - (prevRate ?? 0))) / ((1 - r) * (1 - r)));
+          }
+          if (err <= algTol && best) {
+            // The solution estimate must also be a near-root of g (a Jacobian too badly conditioned for the finite
+            // differences gives steps that are small but wrong); otherwise keep iterating.
+            const zb = (best as { z: number[]; u: number }).z;
+            if (isRoot(zb)) { setZ(zb); return true; }
+          }
+        }
+        if (reliable && !resolved && best && (best as { z: number[]; u: number }).u <= algTol) {
+          // The residual is at the rounding floor before the step test is met: accept the Aitken limit only when its own
+          // uncertainty (drift of the measured rate) is within algTol, and it is a near-root of g.
+          const zb = (best as { z: number[]; u: number }).z;
+          if (isRoot(zb)) { setZ(zb); return true; }
+        }
+        if (k === limit) break;
+
+        // Take the step; backtrack while the residual does not decrease (Newton from far away, or a damped direction).
+        let t = 1;
+        let accepted = false;
+        let zNew = z;
+        let fNew: number[] | null = null;
+        if (!resolved || stepRel <= HUGE_STEP) {
+          zNew = z.map((v, i) => v + dz![i]);
+          accepted = finite(zNew);
+        } else {
+          // A step of many orders of magnitude beyond the iterate (a near-singular Jacobian, e.g. dF/dz ~ 0 at the guess):
+          // the linearisation holds only close to z, so shorten it until |g| decreases (damped Newton).
+
+          for (let tries = 0; tries < 60; tries++, t /= 2) {
+            zNew = z.map((v, i) => v + t * dz![i]);
+            if (!finite(zNew)) continue;
+            const fTry = evaluateF(zNew);
+            if (finite(fTry) && absNorm(residualOf(zNew, fTry)) < gAbs * (1 - 1e-4 * t)) { fNew = fTry; accepted = true; break; }
+          }
+        }
+        if (!accepted) {
+          // No decrease along the direction: the Jacobian is not usable here, move off the point instead.
+          if (pert >= 1 && k < limit) { lastZ = z; lastK = k; stalled = true; return false; }
           z = z.map(v => v + pert * (1 + Math.abs(v)));
           pert = Math.min(pert * 10, 1e12); // consecutive perturbations grow geometrically to reach far roots
           fz = null; prevStep = null; prevRate = null;
           continue;
         }
-        dz = dir.dz;
-        newtonStep = dir.newton;
-        stepSize = absNorm(dz);
-        stepRel = relNorm(dz, z);
-        rate = newtonStep && prevStep !== null && prevStep > 0 ? stepSize / prevStep : null;
-      }
-
-      // A step at rounding level (about 50 ulp) cannot shrink further: the iteration sits at the floor of double precision.
-      const atFloor = newtonStep && stepRel <= 1e-14;
-      // The step-size test applies to full Newton steps only; a damped (Levenberg-Marquardt) step is small by construction.
-      // A step more than 1e9 times the residual comes from a Jacobian below the noise of the finite differences (the
-      // loop is singular to working precision): such a step says nothing about the solution.
-      const reliable = newtonStep && stepSize <= 1e9 * gAbs;
-      if (reliable && ((rate !== null && rate < 1) || atFloor)) {
-        const r = atFloor || rate === null ? 0 : rate;
-        const rEff = Math.max(r, prevRate ?? 0);
-        const err = atFloor ? 0 : rEff < 1 ? (stepRel * rEff) / (1 - rEff) : Infinity;
-        if (dz) {
-          const zc = z.map((v, i) => v + dz![i]);
-          consider(zc, err);
-          // Aitken limit of the geometric tail; its uncertainty is the drift of the rate.
-          consider(z.map((v, i) => v + dz![i] / (1 - r)), (stepRel * Math.abs(r - (prevRate ?? 0))) / ((1 - r) * (1 - r)));
+        const full = t === 1 && newtonStep;
+        if (full) {
+          pert = 1e-2;
+          prevRate = rate;
+          prevStep = stepSize;
+          prevStepRel = stepRel;
+        } else {
+          prevStep = null; prevRate = null;
         }
-        if (err <= algTol && best) {
-          // The solution estimate must also be a near-root of g (a Jacobian too badly conditioned for the finite
-          // differences gives steps that are small but wrong); otherwise keep iterating.
-          const zb = (best as { z: number[]; u: number }).z;
-          if (isRoot(zb)) { setZ(zb); return; }
-        }
+        z = zNew;
+        fz = fNew;
       }
-      if (reliable && !resolved && best && (best as { z: number[]; u: number }).u <= algTol) {
-        // The residual is at the rounding floor before the step test is met: accept the Aitken limit only when its own
-        // uncertainty (drift of the measured rate) is within algTol, and it is a near-root of g.
-        const zb = (best as { z: number[]; u: number }).z;
-        if (isRoot(zb)) { setZ(zb); return; }
-      }
-      if (k === maxIter) break;
+      lastZ = z;
+      lastK = limit;
+      return false;
+    };
 
-      // Take the step; backtrack while the residual does not decrease (Newton from far away, or a damped direction).
-      let t = 1;
-      let accepted = false;
-      let zNew = z;
-      let fNew: number[] | null = null;
-      if (!resolved || stepRel <= HUGE_STEP) {
-        zNew = z.map((v, i) => v + dz![i]);
-        accepted = finite(zNew);
-      } else {
-        // A step of many orders of magnitude beyond the iterate (a near-singular Jacobian, e.g. dF/dz ~ 0 at the guess):
-        // the linearisation holds only close to z, so shorten it until |g| decreases (damped Newton).
-
-        for (let tries = 0; tries < 60; tries++, t /= 2) {
-          zNew = z.map((v, i) => v + t * dz![i]);
-          if (!finite(zNew)) continue;
-          const fTry = evaluateF(zNew);
-          if (finite(fTry) && absNorm(residualOf(zNew, fTry)) < gAbs * (1 - 1e-4 * t)) { fNew = fTry; accepted = true; break; }
+    // Globalisation (XBV-431): damped Newton with the natural monotonicity test of Deuflhard (Numer. Math. 22, 1974, and
+    // NLEQ-ERR, Nowak and Weimann): a step lambda dz is accepted when the simplified Newton correction J(z)^-1 g(z + lambda dz)
+    // is smaller than dz, |dz_bar| <= (1 - lambda / 4) |dz|, with lambda reduced by lambda = min(lambda / 2, mu),
+    // mu = lambda^2 |dz| / (2 |dz_bar - (1 - lambda) dz|), and grown again by 4 after an accepted step. The test is affine
+    // invariant and needs no merit |g|, which stagnates at a non-root where the Jacobian is nearly singular (a far root:
+    // the Newton step jumps there, and lambda grows geometrically from the nearest step the test allows). A zero or
+    // singular Jacobian (no direction) moves the iterate off the point by a growing perturbation. It only moves the
+    // iterate to where the Newton iteration above converges; the acceptance of a solution stays with that iteration
+    // (step test on the solution, and isRoot).
+    const absNorm = (v: number[]) => v.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+    const dampedNewton = (zStart: number[], budget: number): { z: number[]; handoff: boolean; iterations: number } => {
+      let zc = zStart.slice();
+      let it = 0;
+      let lambda = 1;
+      let fullSteps = 0;
+      let jump = 1e-2;
+      for (; it < budget; it++) {
+        if (!finite(zc)) return { z: zc, handoff: false, iterations: it };
+        const fc = evaluateF(zc);
+        if (!finite(fc)) return { z: zc, handoff: false, iterations: it };
+        const gc = residualOf(zc, fc);
+        if (absNorm(gc) === 0) return { z: zc, handoff: true, iterations: it };
+        const J = jacobianOf(zc, fc, true, true);
+        const dir = J ? directionOf(J, gc, true) : null;
+        if (!J || !dir) {
+          // No direction (zero Jacobian): move off the point, further each time.
+          if (jump >= 1e12) return { z: zc, handoff: false, iterations: it + 1 };
+          zc = zc.map(v => v + jump * (1 + Math.abs(v)));
+          jump *= 10; lambda = 1; fullSteps = 0;
+          continue;
         }
+        jump = 1e-2;
+        const dz = dir.dz;
+        const dzNorm = relNorm(dz, zc);
+        lambda = Math.min(1, 8 * lambda);
+        let accepted = false;
+        for (let tries = 0; tries < 200 && lambda > 1e-300; tries++) {
+          const trial = zc.map((v, i) => v + lambda * dz[i]);
+          const ft = finite(trial) ? evaluateF(trial) : null;
+          if (ft && finite(ft)) {
+            const next = directionOf(J, residualOf(trial, ft), true);
+            if (next) {
+              const dBar = relNorm(next.dz, zc);
+              if (dBar <= (1 - 1e-4 * lambda + 1e-12) * dzNorm || dzNorm === 0) { zc = trial; accepted = true; break; }
+              lambda /= 2;
+              continue;
+            }
+          }
+          lambda /= 2;
+        }
+        if (!accepted) return { z: zc, handoff: false, iterations: it + 1 };
+        fullSteps = lambda === 1 && dir.newton ? fullSteps + 1 : 0;
+        if (fullSteps >= 2) return { z: zc, handoff: true, iterations: it + 1 };
       }
-      if (!accepted) {
-        // No decrease along the direction: the Jacobian is not usable here, move off the point instead.
-        z = z.map(v => v + pert * (1 + Math.abs(v)));
-          pert = Math.min(pert * 10, 1e12); // consecutive perturbations grow geometrically to reach far roots
-        fz = null; prevStep = null; prevRate = null;
-        continue;
-      }
-      const full = t === 1 && newtonStep;
-      if (full) {
-        pert = 1e-2;
-        prevRate = rate;
-        prevStep = stepSize;
-        prevStepRel = stepRel;
-      } else {
-        prevStep = null; prevRate = null;
-      }
-      z = zNew;
-      fz = fNew;
+      return { z: zc, handoff: false, iterations: it };
+    };
+
+    // Newton from the start; where it stalls on a stationary start, the dogleg moves the iterate and Newton is tried
+    // again. Both count against maxIter together, so the iteration limit keeps its meaning.
+    const z0 = getZ();
+    let solved = newton(z0, maxIter);
+    let used = lastK;
+    for (let round = 0; !solved && stalled && used < maxIter && round < 6; round++) {
+      const moved = dampedNewton(lastZ, maxIter - used);
+      used = maxIter - Math.max(0, maxIter - used - moved.iterations);
+      if (used >= maxIter) { lastZ = moved.z; break; }
+      solved = newton(moved.z, maxIter - used, true);
+      used += lastK;
+      if (!solved && !(moved.handoff && stalled)) break;
     }
+    if (solved) return;
 
     // maxIter steps did not reach algTol on the solution.
     reportNotConverged();
-    setZ(z);
+    setZ(lastZ);
   }
 
   /** Final major step at the stop time (outputs, then the logging/discrete update), as the live path does; no integration. */
