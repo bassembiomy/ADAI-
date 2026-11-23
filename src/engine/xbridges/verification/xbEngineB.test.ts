@@ -107,12 +107,21 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(run.t.length).toBeLessThan(6);
       for (const v of run.signals['s.out']) expect(Number.isNaN(Number(v))).toBe(false);
     });
-    // FINDING CANDIDATE: a loop with a (numerically trivial) solution y = 1 / (1 - 1e300) = -1e-300 returns y = Infinity with warnings only,
-    // neither the solution nor an ALGEBRAIC_LOOP_NOT_CONVERGED error (Gauss-Seidel overflows, Newton step rejected as singular, damped step overflows).
-    it.fails('y = 1 + 1e300 * y has the solution y = -1e-300: the engine returns a finite value (|y| < 1e-6) or reports the error', () => {
-      const r = solve(linearLoop(1, 1e300, 1), {});
-      expect(Number.isNaN(r.y)).toBe(false);
-      expect(Number.isFinite(r.y) || r.codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')).toBe(true);
+    // XBV-416: y = 1 + g y has the finite solution y = -1 / (g - 1). The engine must return it, or stop with the fatal ALGEBRAIC_LOOP_NOT_CONVERGED
+    // (Simulink stops on a loop it cannot solve); it must never carry Infinity or NaN on with warnings only.
+    for (const g of [1e10, 1e300]) {
+      it(`y = 1 + ${g} * y: the finite solution -1/(g - 1), or a fatal ALGEBRAIC_LOOP_NOT_CONVERGED`, () => {
+        const r = solve(linearLoop(1, g, 1), {});
+        if (r.codes.includes('ALGEBRAIC_LOOP_NOT_CONVERGED')) expect(r.fatal).toBe(true);
+        else expect(Math.abs(r.y - -1 / (g - 1))).toBeLessThanOrEqual(1e-6 * Math.abs(1 / (g - 1)) + 1e-300);
+        const run = runModel(buildModel(linearLoop(1, g, 1)), { solver: 'rk4', dt: 0.1, stopTime: 0.5, probes: ['s.out'] });
+        for (const v of run.signals['s.out']) expect(Number.isFinite(Number(v)), `s.out = ${v}`).toBe(true);
+      });
+    }
+    it('y = 1 + 1e10 * y is solvable in double precision: -1/(1e10 - 1) within 1e-6 relative, no error', () => {
+      const r = solve(linearLoop(1, 1e10, 1), {});
+      expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      expect(Math.abs(r.y - -1 / (1e10 - 1))).toBeLessThanOrEqual(1e-16);
     });
   });
 
@@ -313,10 +322,8 @@ describe('3. D2 blocks drive an Integrator: the integral is exact in closed form
   // Tight tolerances (RelTol 1e-8, AbsTol 1e-10): the solver's truncation error is far below the 1e-5 / 2e-6 budget, so what is left is the event handling.
   const TIGHT = { relTol: 1e-8, absTol: 1e-10 };
   for (const c of cases) for (const solver of VARIABLE) for (const mode of ['batch', 'live'] as const) {
-    // FINDING CANDIDATE: live DEADZONE, crossing exactly on the 0.01 output grid (t = 1.5; t = 0.7 is 0.7000000000000001, only just off it): the step that starts on the crossing holds the
-    // region decided at its start (u == limit is inside), so the whole step [1.5, 1.51] (u - 0.5 > 0) is lost: error h^2 / 2 = 5e-5 > 1e-5.
-    const known = c.name.startsWith('DEADZONE') && mode === 'live';
-    (known ? it.fails : it)(`${c.name}, ${solver} ${mode}, RelTol 1e-8: error <= ${c.tol}`, () => {
+    // XBV-415: a crossing exactly on the live output grid (t = 1.5) must not be skipped.
+    it(`${c.name}, ${solver} ${mode}, RelTol 1e-8: error <= ${c.tol}`, () => {
       const v = integral(c.spec, solver, c.T, mode, 0.01, TIGHT);
       expect(Math.abs(v - c.exact), `got ${v}, exact ${c.exact}`).toBeLessThanOrEqual(c.tol);
     }, 120_000);
@@ -328,8 +335,8 @@ describe('3. D2 blocks drive an Integrator: the integral is exact in closed form
       it(`${solver}: crossing at t = 1.505 (between grid points): error <= 1e-5`, () => {
         expect(Math.abs(integral(dz(1.505), solver, 2, 'live', 0.01, TIGHT) - (2 - 1.505) ** 2 / 2)).toBeLessThanOrEqual(1e-5);
       }, 120_000);
-      // FINDING CANDIDATE: crossing exactly on the grid (t = 1.5, exact in binary): the step starting there loses h^2 / 2 = 5e-5.
-      it.fails(`${solver}: crossing exactly at t = 1.5 (on the grid): error <= 1e-5`, () => {
+      // XBV-415: crossing exactly on the grid (t = 1.5, exact in binary).
+      it(`${solver}: crossing exactly at t = 1.5 (on the grid): error <= 1e-5`, () => {
         expect(Math.abs(integral(dz(1.5), solver, 2, 'live', 0.01, TIGHT) - 0.125)).toBeLessThanOrEqual(1e-5);
       }, 120_000);
     }
@@ -338,10 +345,8 @@ describe('3. D2 blocks drive an Integrator: the integral is exact in closed form
   // Default tolerances (RelTol 1e-3, AbsTol 1e-6): the integrand of the Relay, Switch and PWM cases is piecewise constant, so with the events located the
   // integral must not depend on the tolerance (error <= 2e-6).
   for (const c of cases.filter((k) => k.tol === 2e-6)) for (const solver of VARIABLE) for (const mode of ['batch', 'live'] as const) {
-    // FINDING CANDIDATE: batch ode23 / ode45 at default tolerances lose up to 1.5e-2 on a located Relay / Switch event (ode23tb, which has no first-same-as-last
-    // stage, and live runs are exact; at RelTol 1e-8 the error falls to 1e-7..1e-6, so it scales with the step size taken after the event).
-    const known = mode === 'batch' && solver !== 'ode23tb' && (c.name.startsWith('RELAY') || c.name.startsWith('SWITCH'));
-    (known ? it.fails : it)(`${c.name}, ${solver} ${mode}, default tolerances: error <= ${c.tol}`, () => {
+    // XBV-414: no first-same-as-last stage may be reused across a located event.
+    it(`${c.name}, ${solver} ${mode}, default tolerances: error <= ${c.tol}`, () => {
       const v = integral(c.spec, solver, c.T, mode, 0.01);
       expect(Math.abs(v - c.exact), `got ${v}, exact ${c.exact}`).toBeLessThanOrEqual(c.tol);
     }, 120_000);
