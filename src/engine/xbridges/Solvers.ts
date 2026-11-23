@@ -385,7 +385,7 @@ export class Solvers {
   static runFixedStep(engine: XbridgesEngine, options: SolverOptions) {
       engine.options = options;
       // A fixed step the user gave is kept for ode23 / ode45 as their first step; 'auto' / unset leaves the first step to the
-      // MATLAB initial-step heuristic (XBV-429). The resolved step still defines the output grid (engine.options).
+      // MATLAB initial-step heuristic (XBV-429). Batch ode23 / ode45 log every internal step (no output grid); a user fixedStep only sets the first step, capped by maxStep. engine.options keeps the resolved value.
       const userFixedStep = typeof options.fixedStep === 'number' && Number.isFinite(options.fixedStep) && options.fixedStep > 0;
       // Resolve start/stop/fixed step ('auto') the way Simulink's Solver pane does.
       engine.compile(options.startTime);

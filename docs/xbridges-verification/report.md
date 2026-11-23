@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 24 done of 29; 2 in progress; 3 to do.
-- Findings: 7 open, 234 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 5 open, 236 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 0 open
-  - S3 (diagnostic, UI or convention deviation): 4 open
-  - S4 (documentation): 3 open
+  - S3 (diagnostic, UI or convention deviation): 3 open
+  - S4 (documentation): 2 open
 - Decisions recorded: 19; open: 0.
 
 ## Work packages
@@ -64,22 +64,20 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
-### S3 - diagnostic, UI or convention deviation (4)
+### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. |
 | XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. |
 | XBV-421 | V4 | 5.2 engine | Algebraic loop convergence is judged on the residual (sweep change, Newton residual), not on the solution: y = c(t) + q y under rk4 misses algTol*(1+\|y\|) on the solution by about 1/(1-q): q = 0.9 6x, 0.99 100x, 0.9999 1e4x, 0.999999 (c = 1 + 0.1 t) error 0.167 relative; nonlinear y = c + y - 1e-6 y^2 250x; no diagnostic. Same before and after E11. Simulink iterates until the step is small. Found by the E11 verifier. |
-| XBV-428 | V5 | 4.5 solvers | ode23tb batch with minStep = maxStep = 1e-3 (accepted by the canvas) on x' = -x stops with STIFF_SOLVER_STEP_TOO_SMALL at t = 0.498 / 0.998: rounding drift leaves a final step of remaining / 2, below minStep. The last step before an output or stop time must be allowed to be shorter than minStep (or merged with the previous one). Same before and after E13. Found by the E13 verifier. |
 
-### S4 - documentation (3)
+### S4 - documentation (2)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
 | XBV-422 | V4 | 5.2 engine | y = c + y - k y^2 with k = 1e-8 (solution 1e4) gives a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0: the Newton Jacobian 2 k y is 0 at the starting guess 0. Same before and after E11. Found by the E11 verifier. |
-| XBV-429 | V5 | 4.5 solvers | The E13 initial-step heuristic is not used in batch runs (Solvers.runFixedStep always fills fixedStep = span / 50, so the first step is span / 50 capped by maxStep; the error control then rejects it if too large) and is not recomputed after an event or reset, though the comment says so. Behaviour is correct but inefficient and the comment is wrong. Found by the E13 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -317,6 +315,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-425 (closed): Batch ode23 / ode45 accept a step at minStep that misses the tolerance with no diagnostic (AdaptiveSolver.ts ~298, accept = ... \|\| (batch && atMinStep)): error 2.9e-3 at RelTol 1e-9, silent; live re
 - XBV-426 (closed): Engine-level validation of maxStep / minStep is inconsistent: only batch ode23tb gives STIFF_SOLVER_INVALID_OPTION (and only for non-positive values); live maxStep <= 0 reports the misleading STIFF_SO
 - XBV-427 (closed): SolverOptions.stiffDetect and outputTimes (types.ts 118-119) are declared but read by no solver: remove them or implement them (as D3 removed ode113 / ode15s / ode23s). Neither Simulink nor MATLAB ode
+- XBV-428 (closed): ode23tb batch with minStep = maxStep = 1e-3 (accepted by the canvas) on x' = -x stops with STIFF_SOLVER_STEP_TOO_SMALL at t = 0.498 / 0.998: rounding drift leaves a final step of remaining / 2, below 
+- XBV-429 (closed): The E13 initial-step heuristic is not used in batch runs (Solvers.runFixedStep always fills fixedStep = span / 50, so the first step is span / 50 capped by maxStep; the error control then rejects it i
 
 ## Decisions
 
