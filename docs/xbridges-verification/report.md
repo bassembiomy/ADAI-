@@ -5,11 +5,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 25 done of 29; 2 in progress; 1 to do.
-- Findings: 7 open, 240 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 6 open, 242 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
   - S3 (diagnostic, UI or convention deviation): 2 open
-  - S4 (documentation): 4 open
+  - S4 (documentation): 3 open
 - Decisions recorded: 19; open: 0.
 
 ## Work packages
@@ -77,14 +77,13 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. |
 | XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. |
 
-### S4 - documentation (4)
+### S4 - documentation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
-| XBV-430 | V4 | 5.2 engine | The E12 isRoot guard multiplies the rounding term 64 eps max(\|z\|, \|F\|) by (1 + \|z\|), so its slack grows with \|z\|^2 and exceeds the algTol term above \|z\| ~ 7e7. No probe got through (a singular Jacobian never yields a reliable step), but the bound should be algTol (1 + \|z\|) + 64 eps max(\|z\|, \|F\|). Found by the E12 verifier. |
-| XBV-431 | V4 | 5.2 engine | Far roots are not reached from a zero start: y = 1 + y - k y^2 for k = 1e-14..1e-20 (roots 1e7..1e10), y = 1e12 + y - y^2 (roots +-1e6) and y = 1e-6 + y - 1e-12 y^2 give a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0 (honest, same as before E12). Simulink's trust-region dogleg would reach them; a general fix needs a globalised solver. Found by the E12 verifier. |
 | XBV-435 | V7 | 7.1 code parity | Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refused (XB_SHAPE_MISMATCH) although the capability says allShapes. Also: the float32 innovation output has no passing assertion (only the it.fails), and SIN / COSEC are checked at 0 ULP because the stimulus baseline contains sin (stricter, may fail on another libm). Found by WP-17b and its verifier. |
+| XBV-436 | V4 | 5.2 engine | Algebraic loops with roots above about 1e8 from a zero start depend on the wiring: y = 1 + y - k y^2 converges for k = 1e-18 / 1e-20 (roots 1e9 / 1e10) with Sum '++-' and Gain +k but is fatal with Sum '+++' and Gain -k; y = 1e-3 + y - 1e-20 y^2 (root 3.16e8) and k = 1e-22 are fatal in both wirings. All honest fatals (no false roots). Found by the E16 verifier. |
 
 ## Closed, merged or superseded findings
 
@@ -326,6 +325,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-427 (closed): SolverOptions.stiffDetect and outputTimes (types.ts 118-119) are declared but read by no solver: remove them or implement them (as D3 removed ode113 / ode15s / ode23s). Neither Simulink nor MATLAB ode
 - XBV-428 (closed): ode23tb batch with minStep = maxStep = 1e-3 (accepted by the canvas) on x' = -x stops with STIFF_SOLVER_STEP_TOO_SMALL at t = 0.498 / 0.998: rounding drift leaves a final step of remaining / 2, below 
 - XBV-429 (closed): The E13 initial-step heuristic is not used in batch runs (Solvers.runFixedStep always fills fixedStep = span / 50, so the first step is span / 50 capped by maxStep; the error control then rejects it i
+- XBV-430 (closed): The E12 isRoot guard multiplies the rounding term 64 eps max(\|z\|, \|F\|) by (1 + \|z\|), so its slack grows with \|z\|^2 and exceeds the algTol term above \|z\| ~ 7e7. No probe got through (a singul
+- XBV-431 (closed): Far roots are not reached from a zero start: y = 1 + y - k y^2 for k = 1e-14..1e-20 (roots 1e7..1e10), y = 1e12 + y - y^2 (roots +-1e6) and y = 1e-6 + y - 1e-12 y^2 give a fatal ALGEBRAIC_LOOP_NOT_CON
 - XBV-432 (closed): KALMAN_FILTER float32: the embedded interpreter stores x and P without convertValue (xbInterpreter.ts ~1749-1750), the generated C stores them as float; the state differs by one float32 rounding per t
 - XBV-433 (closed): VectorPow float32 emits powf((double)a, (double)b) (xbCGenerator.ts emitVectorElementwisePower ~1190): the strict compile fails with -Werror=float-conversion; exact for float32 inputs but would narrow
 
