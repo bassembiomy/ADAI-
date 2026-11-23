@@ -2,7 +2,7 @@
 // Variable-step explicit Runge-Kutta solvers: ode45 (Dormand-Prince) and ode23 (Bogacki-Shampine).
 // One error-controlled integration core serves the batch runs (Solvers.runFixedStep) and the live canvas step
 // (decision D3: the canvas controls the error with RelTol / AbsTol inside each output step).
-import { ConsecutiveCrossings, crossedOrTouched, MAX_INTERNAL_STEPS_BATCH, scheduledEvent, type ScheduleCache, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
+import { ConsecutiveCrossings, crossedOrTouched, MAX_INTERNAL_STEPS_BATCH, scheduledEvent, crossBracket, type ScheduleCache, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -236,8 +236,10 @@ export class AdaptiveSolver {
       const target = event === null ? tEnd : (t < event.tLow ? event.tLow : event.tHigh);
       const sliver = event !== null && t >= event.tLow;
       if (sliver && event!.scheduled) {
-        // The bracket of a scheduled event is a few 1e-11 s wide: it is crossed without integrating (error <= width * |f|); the
+        // The bracket of a scheduled event is a few 1e-12 s wide: one explicit step with the left-hand derivative crosses it; the
         // major step at its end decides the new modes and the new output.
+        if (!k1Valid) { engine.computeOutputs(t); k1 = engine.computeDerivatives(t); }
+        crossBracket(engine, t, event!.tHigh, k1);
         t = event!.tHigh; cTime = 0.0; event = null;
         k1Valid = false; majorDone = false; zcBase = null; baseStates = null;
         if (!cfg.batch && t < tEnd) { engine.computeOutputs(t); engine.updateDiscreteStates(t); }
@@ -314,7 +316,7 @@ export class AdaptiveSolver {
         }
         engine.computeOutputs(t + hTry, tr.candidate);
         const zcCurr = engine.getZeroCrossings(t + hTry, tr.candidate);
-        if (engine.hasZeroCrossingSignChange(zcBase, zcCurr)) {
+        if (crossedOrTouched(zcBase, zcCurr)) {
           const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
           if (crossings.note(located.tHigh, EVENT_TIME_TOL)) {
             reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver'));

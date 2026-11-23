@@ -1040,6 +1040,23 @@ export class XbridgesEngine {
     return this.executionOrder.some(b => typeof b.nextEventTime === 'function');
   }
 
+  /**
+   * True when one block's own consecutive scheduled events after `time` are closer than `hMin` (a minimum-step violation: the
+   * solver cannot resolve that block). Events of different blocks may be as close as they like.
+   */
+  public ownScheduledEventsCloserThan(time: number, hHalfWidth: (t: number) => number, hMin: number): boolean {
+    for (const block of this.executionOrder) {
+      if (typeof block.nextEventTime !== 'function') continue;
+      try {
+        const a = block.nextEventTime(block.params, block.state, time);
+        if (a === undefined || !Number.isFinite(a) || !(a > time)) continue;
+        const b = block.nextEventTime(block.params, block.state, a + 2 * hHalfWidth(a));
+        if (b !== undefined && Number.isFinite(b) && b - a < hMin) return true;
+      } catch (err) { /* reported by the block itself */ }
+    }
+    return false;
+  }
+
   /** The earliest scheduled event of any block after `time` (undefined: none). */
   public nextScheduledEvent(time: number): number | undefined {
     let best: number | undefined;

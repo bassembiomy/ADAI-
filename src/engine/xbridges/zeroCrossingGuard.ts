@@ -3,6 +3,7 @@
  * consecutive zero crossings" limit (default 1000): the run stops with an error naming the block, never hangs.
  */
 import type { XbridgesEngine } from './XbridgesEngine';
+import { VectorUtils } from './VectorUtils';
 
 /** Simulink default for "Number of consecutive zero crossings". */
 export const MAX_CONSECUTIVE_ZERO_CROSSINGS = 1000;
@@ -71,24 +72,37 @@ export const scheduledHalfWidth = (tEvent: number) => Math.max(1e-12, 8 * Number
 
 export interface ScheduledEvent { tLow: number; tHigh: number; scheduled: true }
 /** Cache of the next scheduled event of one integration (it only changes once t has passed it). */
-export interface ScheduleCache { next?: number; checked?: number }
+export interface ScheduleCache { next?: number }
 
 /**
- * The next scheduled event of the engine inside (t, tEnd) as a bracket the solver steps to and crosses without integrating
- * (error <= bracket width * |f|), null when none, or 'close' when two events are spaced closer than the minimum step
- * (minimum-step violation: the requested accuracy cannot be met).
+ * The next scheduled event of the engine inside (t, tEnd] as a bracket the solver steps to and crosses, null when none, or
+ * 'close' when ONE block's own events are spaced closer than the minimum step (minimum-step violation: the requested accuracy
+ * cannot be met). Events of different blocks may coincide or lie closer than the minimum step: the solver then lands on each.
  */
 export function scheduledEvent(engine: XbridgesEngine, t: number, tEnd: number, hMin: number, cache: ScheduleCache): ScheduledEvent | null | 'close' {
-  if (cache.next === undefined || cache.next <= t) cache.next = engine.nextScheduledEvent(t) ?? Number.POSITIVE_INFINITY;
+  if (cache.next === undefined || cache.next <= t) {
+    cache.next = engine.nextScheduledEvent(t) ?? Number.POSITIVE_INFINITY;
+    if (Number.isFinite(cache.next) && engine.ownScheduledEventsCloserThan(t, scheduledHalfWidth, hMin)) return 'close';
+  }
   const tn = cache.next;
   const d = scheduledHalfWidth(tn);
   // An event within d behind the interval end counts as at the end: the last stage may already see the value behind the jump.
   if (!(tn <= tEnd + d)) return null;
-  if (cache.checked !== tn) {
-    cache.checked = tn;
-    const after = engine.nextScheduledEvent(tn + 2 * d);
-    if (after !== undefined && after - tn < hMin) return 'close';
-  }
   // An event at the end of the interval is landed on from the left: no stage sees the value behind the jump.
   return { tLow: Math.max(t, tn - d), tHigh: Math.min(tn + d, tEnd), scheduled: true };
+}
+
+/**
+ * Crosses the bracket [t, tHigh] of a scheduled event with one explicit (Euler) step of every state with derivative `k1`
+ * (the left-hand derivative at t), so a state that does not depend on the event (x' = 1) advances by exactly the width.
+ */
+export function crossBracket(engine: XbridgesEngine, t: number, tHigh: number, k1: Map<string, any>): void {
+  const w = tHigh - t;
+  if (!(w > 0)) return;
+  const cand = new Map<string, any>();
+  k1.forEach((d, id) => {
+    const block = engine.getBlock(id);
+    if (block) cand.set(id, VectorUtils.integrateState(block.state, d, w));
+  });
+  engine.commitStateUpdates(cand);
 }

@@ -2,7 +2,7 @@
 // Stiff solvers for X-Bridges: ode14x (fixed-step implicit extrapolation) and ode23tb (variable-step TR-BDF2).
 // The continuous state of every block with evaluateDerivatives is flattened into one Float64Array so that the
 // Jacobian is global (it couples blocks), as in Simulink.
-import { ConsecutiveCrossings, crossedOrTouched, scheduledEvent, type ScheduleCache, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
+import { ConsecutiveCrossings, crossedOrTouched, scheduledEvent, crossBracket, type ScheduleCache, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -97,10 +97,10 @@ function eventStepLength(
   const zcPrev = engine.getZeroCrossings(t, statesPrev);
   engine.computeOutputs(t + h, statesCurr);
   const zcCurr = engine.getZeroCrossings(t + h, statesCurr);
-  if (!engine.hasZeroCrossingSignChange(zcPrev, zcCurr)) return null;
+  if (!crossedOrTouched(zcPrev, zcCurr)) return null;
   // Own bisection (engine.bracketZeroCrossing compares against the signals left by the previous evaluation, which are the
   // ones of the trial end, not of the base). Much tighter than the step: the mode of a Switch flips at the next major step.
-  const tol = Math.min(zeroTol, 1e-11 * Math.max(1, Math.abs(t)));
+  const tol = Math.min(zeroTol, Math.max(1e-11, 16 * Number.EPSILON * Math.abs(t)));
   let lo = t, hi = t + h;
   for (let iter = 0; iter < 80 && hi - lo > tol; iter++) {
     const mid = (lo + hi) / 2;
@@ -117,7 +117,8 @@ function eventStepLength(
     if (crossedOrTouched(zcPrev, zcMid)) hi = mid; else lo = mid;
   }
   const hEv = hi - t;
-  if (!(hEv > hMin && hEv < h)) return null;
+  // An event at the very end of the step (a stop time on the edge) is kept: the retake ends before it, at tLow.
+  if (!(hEv > hMin && lo < t + h)) return null;
   // The retake ends at the last point before the event (tLow); the bracket [tLow, tHigh] is then crossed in one step that is
   // accepted without the error test (the integrand jumps inside it), as in the explicit solvers.
   // A zero of the crossing function at hi has not switched the block yet (rising edge of duty > carrier): extend a little beyond it.
@@ -556,6 +557,8 @@ export class StiffSolver {
       const sliver = ev !== null && tc >= ev.tLow;
       if (sliver && ev!.scheduled) {
         // The bracket of a scheduled event is a few 1e-11 s wide: crossed without integrating; the major step at its end decides the new modes.
+        engine.computeOutputs(tc);
+        crossBracket(engine, tc, ev!.tHigh, engine.computeDerivatives(tc));
         tc = ev!.tHigh; ev = null;
         if (tc < tEnd) { engine.computeOutputs(tc); engine.updateDiscreteStates(tc); }
         continue;
@@ -639,6 +642,8 @@ export class StiffSolver {
       const sliver = ev !== null && t >= ev.tLow;
       if (sliver && ev!.scheduled) {
         // The bracket of a scheduled event is a few 1e-11 s wide: crossed without integrating; the major step at its end decides the new modes.
+        engine.computeOutputs(t);
+        crossBracket(engine, t, ev!.tHigh, engine.computeDerivatives(t));
         t = ev!.tHigh; ev = null;
         continue;
       }
