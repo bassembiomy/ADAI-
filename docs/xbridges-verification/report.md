@@ -4,13 +4,13 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 22 done of 29; 2 in progress; 5 to do.
-- Findings: 5 open, 220 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
-  - S1 (wrong number in simulation or generated C): 1 open
-  - S2 (crash, stop, freeze or silent no-op): 2 open
+- Work packages: 23 done of 29; 1 in progress; 5 to do.
+- Findings: 0 open, 225 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+  - S1 (wrong number in simulation or generated C): 0 open
+  - S2 (crash, stop, freeze or silent no-op): 0 open
   - S3 (diagnostic, UI or convention deviation): 0 open
-  - S4 (documentation): 2 open
-- Decisions recorded: 17; open: 0.
+  - S4 (documentation): 0 open
+- Decisions recorded: 18; open: 0.
 
 ## Work packages
 
@@ -42,7 +42,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-18 | State-machine alignment incl. AUTOSAR path | done | S (tests from controller spec, D7) / F (Opus, D8) |
 | WP-19 | UI component tests | done | S / F |
 | WP-20 | UI end-to-end | done | S / F |
-| WP-21 | Fix loop, one commit per finding | in_progress | S / H, verifier opus |
+| WP-21 | Fix loop, one commit per finding | done | S / H, verifier opus |
 | WP-22 | CI workflow, nightly random graphs, mutation run | in_progress | H / F |
 | WP-23 | Close-out report | todo | O / F |
 
@@ -63,26 +63,6 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 290 blocks. Per-block gate values are in the ledger; most V2-V8 cells are still 'todo' at block level because the family WPs record their evidence per finding and per test file, not per block (WP-23 final pass).
 
 ## Open findings by severity
-
-### S1 - wrong number in simulation or generated C (1)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-411 | V5 | 4.5 solvers | Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.006; at 500 Hz and 1 kHz (minStep 1e-4) values from 0.002 to 1.0. Same without S2. Generalises XBV-409/410. |
-
-### S2 - crash, stop, freeze or silent no-op (2)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-409 | V5 | 4.5 solvers | Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base. |
-| XBV-410 | V5 | 4.5 solvers | ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base. |
-
-### S4 - documentation (2)
-
-| Id | Gate | Plan ref | Summary |
-| --- | --- | --- | --- |
-| XBV-412 | V5 | 4.5 solvers | The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window from the event-location tolerance and machine precision only. Found by the WP-21 S2 verifier. |
-| XBV-413 | V4 | 4.5 solvers | ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. Controller contract test: ROBOT_VACUUM_BATTERY, ROBOT_VACUUM_MAPPING, ROBOT_VACUUM_OBSTACLE_AVOIDANCE and ROBOT_VACUUM_SLAM execute write to a frozen state. |
 
 ## Closed, merged or superseded findings
 
@@ -306,6 +286,11 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-404 (closed): A faulted batch under ode5, ode23 or ode45 leaves a partial step committed (x = 0.554 / 0.54, not a whole number of steps). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.
 - XBV-403 (closed): A faulted step under ode2, ode3 or rk4 is committed (x = 0.6) while the reported simulationTime stays at the step start (0.25). Found by WP-14b (xbWorkerB.test.ts), reproduced by the verifier.
 - XBV-400 (closed): The worker engine snapshot lacks published signal values, so a resume between sample hits publishes the initial output until the next hit (UNIT_DELAY, INTEGRATOR_DISCRETE, DISCRETE_TRANSFER_FUNCTION, 
+- XBV-409 (closed): Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base.
+- XBV-410 (closed): ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base.
+- XBV-411 (closed): Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.00
+- XBV-412 (closed): The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window f
+- XBV-413 (closed): ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so it
 
 ## Decisions
 
@@ -326,6 +311,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D15** (2026-11-16, XBV-186 fixed-step zero crossings): Fixed-step solvers (euler, ode2, ode3, rk4, ode5, ode14x) do not locate zero crossings, as Simulink with 'Enable zero-crossing detection for fixed-step simulation' off (its default): a block mode changes at a major step, the output grid stays k*h, and batch runs equal the live canvas step. Variable-step ode23, ode45 and ode23tb keep event location.
 - **D16** (2026-11-16, XBV-106 vector/matrix state-machine variables): Recorded as a product limitation, not fixed in WP-21: state-machine variables stay scalar; vector/matrix signals work inside an X-Bridges model and cross the state-machine boundary element by element (one scalar variable per element). Building vector/matrix variables is a feature (model, interpreter, C generator, validator, UI) estimated at 1-2 days; reversible on request.
 - **D17** (2026-11-22, XBV-306 diagonal blocks): MatrixDiag, Diag, DiagExtract and ExtractDiag follow MATLAB diag: the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal), as the embedded interpreter and generated C already did. The create/extract diagMode option is removed instead of enforced, so existing models and parity are unchanged. Reversible on request.
+- **D18** (2026-11-23, XBV-413 robot grids): ROBOT_VACUUM_SLAM and ROBOT_VACUUM_MAPPING update their occupancy grids once per major step (Simulink discrete-update semantics), not at every solver stage; euler and rk4 now give the same grid. robot_vacuum_twin and robot_vacuum_full_system outputs change from step 0; both labs still run 2 s without errors and the map fills.
 
 ## Deferred items (notes for follow-up WPs)
 

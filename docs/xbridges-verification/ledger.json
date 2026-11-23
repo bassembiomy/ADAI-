@@ -106,6 +106,12 @@
    "date": "2026-11-22",
    "topic": "XBV-306 diagonal blocks",
    "decision": "MatrixDiag, Diag, DiagExtract and ExtractDiag follow MATLAB diag: the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal), as the embedded interpreter and generated C already did. The create/extract diagMode option is removed instead of enforced, so existing models and parity are unchanged. Reversible on request."
+  },
+  {
+   "id": "D18",
+   "date": "2026-11-23",
+   "topic": "XBV-413 robot grids",
+   "decision": "ROBOT_VACUUM_SLAM and ROBOT_VACUUM_MAPPING update their occupancy grids once per major step (Simulink discrete-update semantics), not at every solver stage; euler and rk4 now give the same grid. robot_vacuum_twin and robot_vacuum_full_system outputs change from step 0; both labs still run 2 s without errors and the map fills."
   }
  ],
  "wps": [
@@ -629,8 +635,8 @@
    "title": "Fix loop, one commit per finding",
    "exec": "S / H, verifier opus",
    "deps": [],
-   "status": "in_progress",
-   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179). Batch J merged (5 findings closed, XBV-037 partly; new XBV-180 to 183)."
+   "status": "done",
+   "note": "User go-ahead 2026-11-11 (fix all findings). Plan: docs/xbridges-verification/wp21-fix-plan.md. Round 1 dispatched: A zero parameters, B embedded quick fixes, C workspace UI. Batch B merged (a3daf970): 9 findings closed; new XBV-150 (embedded PID semantics), XBV-151 (embedded DELAY 0), XBV-152 (vacuous PID parity case). LIBM_CONDITIONED bound (8 eps max(1,|y|), 17 keys) added to xbCodeParity, verifier re-measured worst ratio 3.85. Batch A merged (c8facc19): XBV-015, 019, 040, 064 closed; DELAY delay_length is not tunable during a run (live change to/from 0 refused with PARAMETER_OUT_OF_RANGE, Simulink); XBV-137 ratchet shrunk 463 -> 418; new XBV-153. Batch D dispatched (acceptance 624b6a44). Batch F acceptance: pins removed for XBV-084, 086, 087, 091, 093, 094, 101, 102, 103 and the XBV-084 seeds; new tests for XBV-150 (PID with distinct r and y), 151 (DELAY 0), 107 (passes: closed). XBV-088, 090, 092 stay pinned (canvas-side causes, later batches). Batch C committed (13 findings closed, verifier PASS, e2e 36/36); new XBV-157, 158. WP-20 re-check by the verifier: spec gap (no end-time check in solvers/persistence/subsystem/param-edit) fixed by the controller; XBV-149 pin ordering fixed. Batch D merged (22 findings closed; XBV-066 moved to E; new XBV-154, 155, 156). XBV-057: right shift of a negative int32 by >= 32 gives -1 (arithmetic shift, Simulink signed shift). Batch E acceptance (engine core): pins flipped for XBV-016, 026, 028, 030, 031, 032, 033, 035, 036, 066, 067, 069, 080; PINNED_SEVERITY no longer lists DIMENSION_MISMATCH, DATA_TYPE_MISMATCH (D1), ALGEBRAIC_LOOP_NOT_CONVERGED, LOGIC_NAN_INPUT; U10 and U14 lists emptied (XBV-020, XBV-018); XBV-047 clone list emptied; RELAY rk4 parity pin removed (XBV-067); new xbWp21Engine.test.ts for XBV-002, 003, 004, 005, 155; testkit runModel passes relTol/absTol. XBV-107 reopened (controller test error). Batch F merged after 2 reworks and verifier review (11 findings closed, XBV-093 open; decision D12; new XBV-159, 160, 161, 162). RELAY rk4 parity stays failing until batch E2 (XBV-067 minor steps). Batch E1+E2 merged (26 findings closed incl. XBV-092 and XBV-133 fixed as side effects); structural codes MULTIPLE_DRIVERS, DUPLICATE_BLOCK_ID, UNKNOWN_BLOCK_TYPE; new XBV-163, 164, 165, 166. Pre-existing failure unrelated to WP-21: src/help/helpCoverage.test.ts live-UI fingerprint (fails already at cb974bc3). Batch H merged (12 fuzzy findings closed; math blocks out of the universal lists; decision D13; new XBV-169). Batch G merged (15 findings closed; AC_MOTOR_PID_CONTROL rewritten as a slip-regulated V/f drive; induction-motor stator equations corrected, XBV-170; new embedded XBV-167, 168). Batch F2 merged (11 findings closed; D11 under every fault policy; continuous STATE_SPACE embedded; new XBV-172). Batch E3 merged (XBV-041, 065, 165, 169, 171 closed; D14; trial-point fault rollback bounded: only a strictly smaller retry that is taken, max 30 consecutive; new XBV-174). Batch I merged (19 findings closed; robot labs carry a solver via the optional lab `simulation` entry; StiffSolver reads array derivatives; labs #5/#6 e2e unpinned; new XBV-175 to 179). Batch J merged (5 findings closed, XBV-037 partly; new XBV-180 to 183). Batch E9 merged (4c4a685f) after 2 reworks and verifier PASS: XBV-409, 410, 411, 412, 413 closed; decision D18; nextEventTime block contract (scheduled events), Round8 / Round9 exact-integral acceptance. Performance note: 20 kHz PWM for 1 s takes 7-10 s on the verifier's machine with ode45 (accurate; the base was faster only because it skipped pulses); 5 carriers at 1000-1004 Hz take 15-24 s per simulated second. No open findings left in WP-21."
   },
   {
    "id": "WP-22",
@@ -2672,40 +2678,45 @@
    "plan_ref": "4.5 solvers",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base."
+   "status": "closed",
+   "summary": "Live ode45 integrates a 30 % duty 20 kHz PWM to 0.0673 over 0.2 s instead of 0.06 (12 % high); pinned in xbWp21Round7. Found while writing the WP-21 S2 rework acceptance; same on the base.",
+   "fix": "WP-21 E9: blocks with time-scheduled discontinuities (every PWM carrier, THREE_PHASE_PWM, SVPWM_GATE_GENERATOR, WaveformGen Square, Step) declare nextEventTime; ode23 / ode45 / ode23tb land on a +-1e-12 s bracket around each edge and cross it with one explicit Euler step of every state, live and batch. 20 kHz 30 % PWM integrates to 0.06 within 5e-8."
   },
   {
    "id": "XBV-410",
    "plan_ref": "4.5 solvers",
    "severity": "S2",
    "gate": "V5",
-   "status": "open",
-   "summary": "ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base."
+   "status": "closed",
+   "summary": "ode23tb integrates a 30 % duty 20 kHz PWM to about 0 (batch 0.0002 over 1 s instead of 0.3; live 0.0013 over 0.2 s instead of 0.06); pinned in xbWp21Round7. Same on the base.",
+   "fix": "WP-21 E9: as XBV-409; exact-integral acceptance (xbWp21Round8, 72 cases, |error| <= 2e-6) over partial periods, duty steps, duty 0 / 1, sawtooth, inverse sawtooth and square carriers, SVPWM and WaveformGen Square."
   },
   {
    "id": "XBV-411",
    "plan_ref": "4.5 solvers",
    "severity": "S1",
    "gate": "V5",
-   "status": "open",
-   "summary": "Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.006; at 500 Hz and 1 kHz (minStep 1e-4) values from 0.002 to 1.0. Same without S2. Generalises XBV-409/410."
+   "status": "closed",
+   "summary": "Variable-step solvers mis-integrate a PWM-driven integrator broadly (controller acceptance, oracle duty * 1 s = 0.3, fixed-step rk4 converges to 0.300): at 50 Hz ode45 0.238, ode23 0.248, ode23tb 0.006; at 500 Hz and 1 kHz (minStep 1e-4) values from 0.002 to 1.0. Same without S2. Generalises XBV-409/410.",
+   "fix": "WP-21 E9: as XBV-409; 1000 / 500 / 50 Hz accurate at any minStep. Events of different blocks closer than hMin are landed one after another; an event at the stop time keeps the whole last pulse (xbWp21Round9)."
   },
   {
    "id": "XBV-412",
    "plan_ref": "4.5 solvers",
    "severity": "S4",
    "gate": "V5",
-   "status": "open",
-   "summary": "The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window from the event-location tolerance and machine precision only. Found by the WP-21 S2 verifier."
+   "status": "closed",
+   "summary": "The ZERO_CROSSING_CHATTER window includes 10 * minStep, so with a user minStep of 1e-3 a 1 kHz PWM is flagged as chatter at t = 0.62; Simulink would report a minimum-step violation. Build the window from the event-location tolerance and machine precision only. Found by the WP-21 S2 verifier.",
+   "fix": "WP-21 E9: the chatter window no longer widens with minStep; STIFF_SOLVER_STEP_TOO_SMALL only when one block's own events are closer than hMin; genuine sliding modes still give ZERO_CROSSING_CHATTER."
   },
   {
    "id": "XBV-413",
    "plan_ref": "4.5 solvers",
    "severity": "S4",
    "gate": "V4",
-   "status": "open",
-   "summary": "ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. Controller contract test: ROBOT_VACUUM_BATTERY, ROBOT_VACUUM_MAPPING, ROBOT_VACUUM_OBSTACLE_AVOIDANCE and ROBOT_VACUUM_SLAM execute write to a frozen state."
+   "status": "closed",
+   "summary": "ROBOT_VACUUM_BATTERY execute mutates its committed state in place (BlockDefinitions.ts ~7181), the only library block that does; batch ode45 / ode23 do not restore in-place mutations on a fault, so its final state shows 100 instead of the last committed 100.000005 (outputs unchanged). Fix the block to copy its state and add a contract test that deep-freezes every block's state during a step, so the 256-element copy cap in cloneState can go. Found by the WP-21 S2 verifier. Controller contract test: ROBOT_VACUUM_BATTERY, ROBOT_VACUUM_MAPPING, ROBOT_VACUUM_OBSTACLE_AVOIDANCE and ROBOT_VACUUM_SLAM execute write to a frozen state.",
+   "fix": "WP-21 E9: ROBOT_VACUUM_BATTERY, MAPPING, OBSTACLE_AVOIDANCE and SLAM copy their state instead of writing it in place; contract test deep-freezes every block's state during a step. SLAM / MAPPING grids update once per major step (D18)."
   }
  ],
  "blocks": {
