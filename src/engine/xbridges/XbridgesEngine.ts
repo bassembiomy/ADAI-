@@ -890,17 +890,17 @@ export class XbridgesEngine {
     const residualOf = (zv: number[], fv: number[]) => zv.map((zi, i) => zi - fv[i]);
     // dF/dz by central differences, h and 2h combined (error O(h^4), no truncation error for a cubic); falls back to
     // the single central, then the forward difference when F is not finite at the wider points. null: not finite.
-    const jacobianOf = (zv: number[], fv: number[]): number[][] | null => {
+    const jacobianOf = (zv: number[], fv: number[], rich: boolean): number[][] | null => {
       const J: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
       for (let j = 0; j < n; j++) {
-        const h = 1e-4 * Math.max(1, Math.abs(zv[j]));
+        const h = (rich ? 1e-4 : 1e-5) * Math.max(1, Math.abs(zv[j]));
         const at = (d: number) => evaluateF(zv.map((v, i) => (i === j ? v + d : v)));
         const p1 = at(h), m1 = at(-h);
         let col: number[] | null = null;
         if (finite(p1) && finite(m1)) {
           const d1 = p1.map((v, i) => (v - m1[i]) / (2 * h));
-          const p2 = at(2 * h), m2 = at(-2 * h);
-          col = finite(p2) && finite(m2) ? d1.map((v, i) => (4 * v - (p2[i] - m2[i]) / (4 * h)) / 3) : d1;
+          const p2 = rich ? at(2 * h) : null, m2 = rich ? at(-2 * h) : null;
+          col = p2 && m2 && finite(p2) && finite(m2) ? d1.map((v, i) => (4 * v - (p2[i] - m2[i]) / (4 * h)) / 3) : d1;
         } else {
           const hf = 1e-6 * Math.max(1, Math.abs(zv[j]));
           const pf = at(hf);
@@ -941,7 +941,6 @@ export class XbridgesEngine {
     let prevStep: number | null = null; // size (max-norm) of the previous full Newton step (null after a damped / perturbed step)
     let prevStepRel = 0; // the same, scaled by 1 + |z|
     let prevRate: number | null = null; // ratio of the previous two Newton steps
-    let goodRate: number | null = null; // last rate measured on a resolved residual
     let best: { z: number[]; u: number } | null = null; // best estimate of the solution and its uncertainty
     const consider = (zc: number[], u: number) => { if (finite(zc) && (!best || u <= best.u)) best = { z: zc, u }; };
     const absNorm = (v: number[]) => v.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
@@ -961,20 +960,20 @@ export class XbridgesEngine {
       if (gRel === 0) { finalize(z); return; }
       resolved = gRel > RESOLVED;
 
-      if (!resolved && goodRate !== null && goodRate >= 0.1 && prevStep !== null) {
-        // The residual is lost in rounding: continue on the measured geometric rate (the multiple-root case), the
-        // solution estimate stays the best one found while the steps were still resolved.
-        stepSize = prevStep * goodRate;
-        stepRel = prevStepRel * goodRate;
-        rate = goodRate;
-      } else {
-        const J = jacobianOf(z, fz);
-        const dir = J ? directionOf(J, g) : null;
+      {
+        // Central differences (2n evaluations); the Richardson combination (4n) only where the cheap Jacobian is not
+        // enough: slow convergence (rate >= 0.5, e.g. a multiple root) or an ill-conditioned / singular system.
+        let J = jacobianOf(z, fz, prevRate !== null && prevRate >= 0.5);
+        let dir = J ? directionOf(J, g) : null;
+        if (!dir || !dir.newton) {
+          J = jacobianOf(z, fz, true);
+          dir = J ? directionOf(J, g) : null;
+        }
         if (!dir) {
           // Singular or zero Jacobian at this point (e.g. dF/dz = 0 at the start guess): move off the stationary point.
           if (k === maxIter) break;
           z = z.map(v => v + 1e-2 * (1 + Math.abs(v)));
-          fz = null; prevStep = null; prevRate = null; goodRate = null;
+          fz = null; prevStep = null; prevRate = null;
           continue;
         }
         dz = dir.dz;
@@ -1004,9 +1003,14 @@ export class XbridgesEngine {
           if (finite(fb) && relNorm(residualOf(zb, fb), zb) <= 1e-3) { setZ(zb); return; }
         }
       }
+      if (!resolved && best && (best as { z: number[]; u: number }).u <= algTol) {
+        // The residual is at the rounding floor before the step test is met: accept the Aitken limit only when its own
+        // uncertainty (drift of the measured rate) is within algTol, and it is a near-root of g.
+        const zb = (best as { z: number[]; u: number }).z;
+        const fb = evaluateF(zb);
+        if (finite(fb) && relNorm(residualOf(zb, fb), zb) <= 1e-3) { setZ(zb); return; }
+      }
       if (k === maxIter) break;
-
-      if (!dz) { prevStep = stepSize; prevStepRel = stepRel; continue; } // predicted step: nothing is evaluated
 
       // Take the step; backtrack while the residual does not decrease (Newton from far away, or a damped direction).
       let t = 1;
@@ -1030,7 +1034,7 @@ export class XbridgesEngine {
       if (!accepted) {
         // No decrease along the direction: the Jacobian is not usable here, move off the point instead.
         z = z.map(v => v + 1e-2 * (1 + Math.abs(v)));
-        fz = null; prevStep = null; prevRate = null; goodRate = null;
+        fz = null; prevStep = null; prevRate = null;
         continue;
       }
       const full = t === 1 && newtonStep;
@@ -1038,9 +1042,8 @@ export class XbridgesEngine {
         prevRate = rate;
         prevStep = stepSize;
         prevStepRel = stepRel;
-        if (resolved && rate !== null && rate < 1) goodRate = rate;
       } else {
-        prevStep = null; prevRate = null; goodRate = null;
+        prevStep = null; prevRate = null;
       }
       z = zNew;
       fz = fNew;
