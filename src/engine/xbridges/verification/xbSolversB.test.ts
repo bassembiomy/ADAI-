@@ -487,26 +487,25 @@ describe('invalid maxStep / minStep', () => {
       expect(solverOptionsForRun(s, T({ maxStep: '-1' }))).toEqual({ relTol: 1e-3, absTol: 1e-6 });
     }
   });
-  // Engine level (options passed to the solver directly, as the API / worker user can): what each solver emits today.
+  // Engine level (options passed to the solver directly, as the API / worker user can), XBV-426: every invalid combination gives exactly
+  // STIFF_SOLVER_INVALID_OPTION (as the canvas does), never the misleading STIFF_SOLVER_STEP_TOO_SMALL or a silent clamp.
   // [solver, mode, options, expected error codes]
   const IN: string[] = ['STIFF_SOLVER_INVALID_OPTION'];
-  const TS: string[] = ['STIFF_SOLVER_STEP_TOO_SMALL'];
-  const NONE: string[] = [];
-  const MAXBAD = [{ maxStep: 0 }, { maxStep: -1 }];
+    const MAXBAD = [{ maxStep: 0 }, { maxStep: -1 }];
   const MINBAD = [{ minStep: 0 }, { minStep: -1 }];
   const CROSS = { minStep: 1, maxStep: 0.1 };
   const ROWS: [Variable, 'live' | 'batch', Record<string, number>, string[]][] = [
-    ['ode23', 'live', MAXBAD[0], TS], ['ode23', 'live', MAXBAD[1], TS], ['ode23', 'live', MINBAD[0], NONE], ['ode23', 'live', MINBAD[1], NONE], ['ode23', 'live', CROSS, TS],
-    ['ode45', 'live', MAXBAD[0], TS], ['ode45', 'live', MAXBAD[1], TS], ['ode45', 'live', MINBAD[0], NONE], ['ode45', 'live', MINBAD[1], NONE], ['ode45', 'live', CROSS, NONE],
-    ['ode23tb', 'live', MAXBAD[0], TS], ['ode23tb', 'live', MAXBAD[1], TS], ['ode23tb', 'live', MINBAD[0], NONE], ['ode23tb', 'live', MINBAD[1], NONE], ['ode23tb', 'live', CROSS, TS],
-    ['ode23', 'batch', MAXBAD[0], NONE], ['ode23', 'batch', MAXBAD[1], NONE], ['ode23', 'batch', MINBAD[0], NONE], ['ode23', 'batch', MINBAD[1], NONE], ['ode23', 'batch', CROSS, NONE],
-    ['ode45', 'batch', MAXBAD[0], NONE], ['ode45', 'batch', MAXBAD[1], NONE], ['ode45', 'batch', MINBAD[0], NONE], ['ode45', 'batch', MINBAD[1], NONE], ['ode45', 'batch', CROSS, NONE],
-    ['ode23tb', 'batch', MAXBAD[0], IN], ['ode23tb', 'batch', MAXBAD[1], IN], ['ode23tb', 'batch', MINBAD[0], IN], ['ode23tb', 'batch', MINBAD[1], IN], ['ode23tb', 'batch', CROSS, NONE],
+    ['ode23', 'live', MAXBAD[0], IN], ['ode23', 'live', MAXBAD[1], IN], ['ode23', 'live', MINBAD[0], IN], ['ode23', 'live', MINBAD[1], IN], ['ode23', 'live', CROSS, IN],
+    ['ode45', 'live', MAXBAD[0], IN], ['ode45', 'live', MAXBAD[1], IN], ['ode45', 'live', MINBAD[0], IN], ['ode45', 'live', MINBAD[1], IN], ['ode45', 'live', CROSS, IN],
+    ['ode23tb', 'live', MAXBAD[0], IN], ['ode23tb', 'live', MAXBAD[1], IN], ['ode23tb', 'live', MINBAD[0], IN], ['ode23tb', 'live', MINBAD[1], IN], ['ode23tb', 'live', CROSS, IN],
+    ['ode23', 'batch', MAXBAD[0], IN], ['ode23', 'batch', MAXBAD[1], IN], ['ode23', 'batch', MINBAD[0], IN], ['ode23', 'batch', MINBAD[1], IN], ['ode23', 'batch', CROSS, IN],
+    ['ode45', 'batch', MAXBAD[0], IN], ['ode45', 'batch', MAXBAD[1], IN], ['ode45', 'batch', MINBAD[0], IN], ['ode45', 'batch', MINBAD[1], IN], ['ode45', 'batch', CROSS, IN],
+    ['ode23tb', 'batch', MAXBAD[0], IN], ['ode23tb', 'batch', MAXBAD[1], IN], ['ode23tb', 'batch', MINBAD[0], IN], ['ode23tb', 'batch', MINBAD[1], IN], ['ode23tb', 'batch', CROSS, IN],
   ];
   const run = (solver: Variable, mode: 'live' | 'batch', o: Record<string, number>) =>
     mode === 'live' ? liveRun(decay(), solver, { dt: 0.5, stop: 1, options: o }).e : batchRun(decay(), solver, 0.05, o).e;
   for (const [solver, mode, o, codes] of ROWS) {
-    it(`pinned: ${solver} ${mode} ${JSON.stringify(o)} -> error codes [${codes}]`, () => {
+    it(`${solver} ${mode} ${JSON.stringify(o)} -> error codes [${codes}]`, () => {
       expect([...new Set(errorCodes(run(solver, mode, o)))]).toEqual(codes);
     });
   }
