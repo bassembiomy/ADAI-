@@ -186,6 +186,22 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
         expect(run.t.length).toBeLessThan(3);
       });
     }
+    // XBV-431: far roots from a zero start. y = c + y - k y^2 has the roots +-sqrt(c / k); Simulink's trust-region solver reaches them. The engine
+    // must converge to one root within algTol on the solution, keep the same root over the steps, and report no error.
+    const ckLoop = (c: number, k: number): ModelSpec => ({
+      blocks: [{ id: 'one', type: 'Constant', params: { value: c } }, { id: 's', type: 'Sum', params: { signs: '++-' } },
+        { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } }, { id: 'gk', type: 'GAIN', params: { gain: k } }],
+      wires: ['one.out -> s.in1', 's.out -> s.in2', 's.out -> p.in1', 's.out -> p.in2', 'p.y -> gk.u', 'gk.y -> s.in3'],
+    });
+    for (const [c, k] of [[1, 1e-14], [1, 1e-20], [1e12, 1], [1e-6, 1e-12]] as const) {
+      it(`y = ${c} + y - ${k} y^2 (roots +-${Math.sqrt(c / k)}): one root within algTol, the same at every step, no error (XBV-431)`, () => {
+        const run = runModel(buildModel(ckLoop(c, k)), { solver: 'rk4', dt: 0.1, stopTime: 0.5, probes: ['s.out'] });
+        expect(run.diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)).toEqual([]);
+        const r = Math.sqrt(c / k), v0 = Number(run.signals['s.out'][0]);
+        const ys = Math.sign(v0) * r;
+        for (const v of run.signals['s.out']) expect(Math.abs(Number(v) - ys), `s.out = ${v}`).toBeLessThanOrEqual(1e-6 * (1 + r));
+      });
+    }
     it('y = 1 + 1e10 * y is solvable in double precision: -1/(1e10 - 1) within 1e-6 relative, no error', () => {
       const r = solve(linearLoop(1, 1e10, 1), {});
       expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
