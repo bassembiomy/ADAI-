@@ -4,12 +4,12 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 23 done of 29; 2 in progress; 4 to do.
-- Findings: 5 open, 229 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Work packages: 24 done of 29; 2 in progress; 3 to do.
+- Findings: 10 open, 229 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
-  - S2 (crash, stop, freeze or silent no-op): 0 open
+  - S2 (crash, stop, freeze or silent no-op): 3 open
   - S3 (diagnostic, UI or convention deviation): 3 open
-  - S4 (documentation): 2 open
+  - S4 (documentation): 4 open
 - Decisions recorded: 18; open: 0.
 
 ## Work packages
@@ -30,7 +30,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-10 | V2/V3 navigation, robot vacuum, DEM/CFD | done | S / F |
 | WP-11 | Powertrain: U1-U16, V6, V8; import powertrain ledger verdicts | done | H / F |
 | WP-12 | Solvers part A: orders on 5 problems, polynomial exactness, stiff stability, algebraic loop per solver, dispatcher and argument agreement, batch edge inputs | done | S / F |
-| WP-12b | Solvers part B: adaptive error control on the canvas (D3: ode23/ode45/ode23tb with RelTol/AbsTol), outputTimes and stop-time hit, maxStep/minStep, stiffness diagnostic, Van der Pol and Robertson, time accumulation (XBV-017) | todo | S / F |
+| WP-12b | Solvers part B: adaptive error control on the canvas (D3: ode23/ode45/ode23tb with RelTol/AbsTol), outputTimes and stop-time hit, maxStep/minStep, stiffness diagnostic, Van der Pol and Robertson, time accumulation (XBV-017) | done | S / F |
 | WP-13 | Engine semantics | done | S / F |
 | WP-13b | Engine part B: algTol/maxIter, more rate ratios, zero crossings for D2 blocks once XBV-036 is fixed, DOE evaluator diagnostic codes (src/engine/doe) | done | S / F |
 | WP-14 | Worker parity and protocol | done | S / F |
@@ -64,6 +64,14 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Open findings by severity
 
+### S2 - crash, stop, freeze or silent no-op (3)
+
+| Id | Gate | Plan ref | Summary |
+| --- | --- | --- | --- |
+| XBV-423 | V5 | 4.5 solvers | Live ode23 / ode45 have no initial-step heuristic: the first internal step is the output step (AdaptiveSolver.ts ~412). For ode23 on x' = -x with dt = 1 the Bogacki-Shampine estimate is exactly 0 at h lambda = -1 (err = -z^3 (1+z)/48), so the step is accepted: x(1) = 1/3 (-9.4 %), and the step hint keeps h = 1 (x(10) -62.7 %). Simulink starts from a tolerance-based initial step capped by MaxStep. Pinned in xbSolversB. Found by WP-12b. |
+| XBV-424 | V5 | 4.5 solvers | maxStep does not cap the first step: live h0 = min(hint ?? dt, dt) ignores hMax (ode23 one step of 1.0 with maxStep 0.01), batch h0 = span / 50 = 0.2 (981 steps for T = 10, maxStep 0.01, instead of at least 1000). Pinned in xbSolversB. Found by WP-12b. |
+| XBV-425 | V5 | 4.5 solvers | Batch ode23 / ode45 accept a step at minStep that misses the tolerance with no diagnostic (AdaptiveSolver.ts ~298, accept = ... \|\| (batch && atMinStep)): error 2.9e-3 at RelTol 1e-9, silent; live reports STIFF_SOLVER_STEP_TOO_SMALL and Simulink reports a min-step violation. Pinned in xbSolversB. Found by WP-12b. |
+
 ### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
@@ -72,12 +80,14 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. |
 | XBV-421 | V4 | 5.2 engine | Algebraic loop convergence is judged on the residual (sweep change, Newton residual), not on the solution: y = c(t) + q y under rk4 misses algTol*(1+\|y\|) on the solution by about 1/(1-q): q = 0.9 6x, 0.99 100x, 0.9999 1e4x, 0.999999 (c = 1 + 0.1 t) error 0.167 relative; nonlinear y = c + y - 1e-6 y^2 250x; no diagnostic. Same before and after E11. Simulink iterates until the step is small. Found by the E11 verifier. |
 
-### S4 - documentation (2)
+### S4 - documentation (4)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-417 | V4 | 5.2 engine | algTol and maxIter of the algebraic loop solver are honoured by the engine (engine.options) but the canvas never passes them (solverOptionsForRun) and the workspace has no field for them; Simulink exposes the algebraic loop solver tolerance in the configuration parameters. Decide whether to expose them or document the fixed defaults (1e-6, 100). Found by WP-13b. |
 | XBV-422 | V4 | 5.2 engine | y = c + y - k y^2 with k = 1e-8 (solution 1e4) gives a fatal ALGEBRAIC_LOOP_NOT_CONVERGED at t = 0: the Newton Jacobian 2 k y is 0 at the starting guess 0. Same before and after E11. Found by the E11 verifier. |
+| XBV-426 | V5 | 4.5 solvers | Engine-level validation of maxStep / minStep is inconsistent: only batch ode23tb gives STIFF_SOLVER_INVALID_OPTION (and only for non-positive values); live maxStep <= 0 reports the misleading STIFF_SOLVER_STEP_TOO_SMALL; batch ode23 / ode45 clamp silently (maxStep 0 means ~1e6 steps); minStep > maxStep is silent. The canvas validates the same texts first, so only API and batch callers reach it. Pinned in xbSolversB. Found by WP-12b. |
+| XBV-427 | V5 | 4.5 solvers | SolverOptions.stiffDetect and outputTimes (types.ts 118-119) are declared but read by no solver: remove them or implement them (as D3 removed ode113 / ode15s / ode23s). Neither Simulink nor MATLAB ode45 has a stiffness diagnostic. Pinned in xbSolversB. Found by WP-12b. |
 
 ## Closed, merged or superseded findings
 

@@ -245,10 +245,9 @@ describe('D3: AbsTol governs where x is near 0 (x\' = -x from x0 = 1e-8)', () =>
       const tight = run(1e-18);
       // AbsTol << RelTol |x|: the relative error stays within the RelTol bound.
       expect(Math.abs(tight.x - exact) / exact, `${solver} ${mode} tight`).toBeLessThanOrEqual(bound(solver, 5, 1e-6, 0, 1) );
-      // AbsTol >> |x|: the local tolerance is AbsTol, the solver takes the largest steps (fewer than with tight AbsTol),
-      // and the absolute error is still within the AbsTol bound: 2 t AbsTol.
+      // AbsTol >> |x|: the local tolerance is AbsTol, so the solver takes larger steps (fewer than with tight AbsTol). With |x| ~ 1e-10 an
+      // absolute-error bound of 2 t AbsTol cannot fail, so only the step count discriminates here.
       const loose = run(1e-4);
-      expect(Math.abs(loose.x - exact), `${solver} ${mode} loose`).toBeLessThanOrEqual(2 * 5 * 1e-4);
       expect(loose.commits, `${solver} ${mode} steps loose ${loose.commits} vs tight ${tight.commits}`).toBeLessThan(tight.commits);
     });
   }
@@ -343,12 +342,17 @@ describe('output times: the canvas time base lands on start + k dt, the last sam
     expect(plans[3].stepNow).toBeCloseTo(0.05, 12);
     for (const p of plans.slice(0, 3)) expect(p.stepNow).toBe(0.1);
   });
-  it('outputTimes (SolverOptions.outputTimes) is declared but read by no solver: the option is not supported', () => {
-    const root = join(__dirname, '..');
-    for (const f of ['Solvers.ts', 'AdaptiveSolver.ts', 'StiffSolver.ts', 'liveStep.ts', 'XbridgesEngine.ts', 'xbridgesWorker.ts', 'simulationConfig.ts']) {
-      expect(readFileSync(join(root, f), 'utf8'), f).not.toMatch(/outputTimes/);
-    }
-  });
+  // XBV-427: SolverOptions declares outputTimes and stiffDetect (types.ts) but no solver reads them. A declared option must be implemented or
+  // removed (as D3 removed ode113 / ode15s / ode23s).
+  for (const opt of ['outputTimes', 'stiffDetect']) {
+    it.fails(`FINDING XBV-427: SolverOptions.${opt} is either not declared or read by a solver`, () => {
+      const root = join(__dirname, '..');
+      const declared = new RegExp(`\\b${opt}\\??\\s*:`).test(readFileSync(join(root, 'types.ts'), 'utf8'));
+      const read = ['Solvers.ts', 'AdaptiveSolver.ts', 'StiffSolver.ts', 'liveStep.ts', 'XbridgesEngine.ts', 'xbridgesWorker.ts', 'simulationConfig.ts']
+        .some((f) => new RegExp(`\\b${opt}\\b`).test(readFileSync(join(root, f), 'utf8')));
+      expect(!declared || read).toBe(true);
+    });
+  }
 });
 
 describe('batch runner: every solver ends exactly at the stop time and does not repeat a major step', () => {
@@ -403,7 +407,7 @@ describe('maxStep caps the internal step (a pulse narrower than maxStep cannot b
       expect(largestGap(late, 1, 2)).toBeLessThanOrEqual(MAX * (1 + 1e-9));
       expect(r.probe.commits).toBeGreaterThanOrEqual(100);
     });
-    // FINDING CANDIDATE (batch ode23 / ode45): the first step is h0 = (stop - start) / 50 = 0.02 > maxStep 0.01 (981 internal
+    // FINDING CANDIDATE (batch ode23 / ode45): the first step is h0 = (stop - start) / 50 = 0.2 > maxStep 0.01 (981 internal
     // steps for T = 10, maxStep 0.01 instead of at least 1000).
     it.fails(`FINDING CANDIDATE: ${solver} batch: the first step h0 = span / 50 exceeds maxStep ${MAX} (at least T / maxStep steps expected)`, () => {
       const r = batchRun(ZERO, solver, 10, { maxStep: MAX });
@@ -587,20 +591,19 @@ describe('Van der Pol mu = 1000 (stiff)', () => {
   // ode45 (explicit): pinned outcome - it completes without an error diagnostic (stability-limited steps of about 1e-3,
   // a few 1e5 steps, about 10 s) and agrees with the reference; trial steps that blow up are rolled back and leave
   // NUMERICAL_INSTABILITY warnings. There is no stiffness diagnostic in the engine (SolverOptions.stiffDetect is never read).
-  it('ode45 live, RelTol 1e-6, output step 100: completes (no error diagnostic) and agrees with the reference; no stiffness diagnostic exists', () => {
+  it('ode45 live, RelTol 1e-6, output step 100: completes (no error diagnostic) and agrees with the reference; no stiffness diagnostic (none in Simulink either)', () => {
     const r = liveRun(vdp(1000), 'ode45', { dt: 100, stop: 500, options: { relTol: 1e-6, absTol: 1e-9 }, ids: ['x1', 'x2'] });
     expect(r.ok, allCodes(r.e).join()).toBe(true);
     expect(errorCodes(r.e)).toEqual([]);
     expect(r.ms, 'ode45 wall time').toBeLessThan(50_000);
     TS.forEach((t, i) => expect(Math.abs(r.values.x1[t / 100] - ref[i][0]) / Math.abs(ref[i][0]), `x1(${t})`).toBeLessThanOrEqual(1e-3));
     expect(allCodes(r.e).every((c) => c === 'NUMERICAL_INSTABILITY')).toBe(true);
-    expect(readFileSync(join(__dirname, '../AdaptiveSolver.ts'), 'utf8')).not.toMatch(/stiffDetect/);
   }, 90_000);
 });
 
 describe('Robertson kinetics (Hairer-Wanner reference at t = 40)', () => {
-  // y1(40) = 0.7158270687, y2(40) = 9.185534765e-6, y3(40) = 0.2841637457 (Hairer & Wanner, Solving ODEs II, problem HIRES-free
-  // "Robertson", tabulated reference values).
+  // y1(40) = 0.7158270687, y2(40) = 9.185534765e-6, y3(40) = 0.2841637457 (Hairer & Wanner, Solving ODEs II, problem ROBER,
+  // tabulated reference values).
   const REF = { y1: 0.7158270687, y2: 9.185534765e-6, y3: 0.2841637457 };
   const check = (get: (id: string) => number, label: string) => {
     for (const id of ['y1', 'y2', 'y3'] as const) expect(Math.abs(get(id) - REF[id]) / REF[id], `${label} ${id} = ${get(id)} vs ${REF[id]}`).toBeLessThanOrEqual(1e-4);
