@@ -22,20 +22,25 @@
  *     (x, P) unrounded in float64 (xbInterpreter.ts:~1750 assigns runtime.stateSlots without convertValue) while C stores
  *     them in float; that is the one kind of disagreement, see the KALMAN_FILTER case below.
  *   Tolerances (derived per kind of computation, never fitted to a result):
- *     - elementary operation (+ - * / compare, select): both sides evaluate the same IEEE double operation on identical
- *       (float32-rounded) inputs, so the double result is bit-equal and the single rounding is equal: bound 1 float32 ULP
- *       (0 expected, 1 allowed for a re-association of a sum in the generated loop);
+ *     - block WITHOUT a libm call of its own (decided per block type from the C it emits: the libm calls of its model minus
+ *       those of the baseline models Constant -> GAIN and the WaveformGen stimulus, so a sine stimulus does not make GAIN a
+ *       libm block): both sides evaluate the same IEEE double operations in the same order on identical float32-rounded
+ *       inputs, so the double result is bit-equal and the single rounding is equal: bound 0 float32 ULP. Measured worst is 0
+ *       for every such family; a 1-ULP slack would only hide defects;
  *     - libm call (sin, exp, pow, ...): glibc and V8 may differ by up to 1 double ULP (2^-52 relative). That moves the float32
  *       rounding only when the double result lies within 2^-52 relative of a float32 rounding boundary, a 1 float32 ULP
- *       step. Stated bound for the libm families: 4 float32 ULP (the part-A budget; observed far below);
+ *       step. Stated bound for the libm blocks: 1 float32 ULP (even 4 double ULP only flips a float32 rounding by one step; observed 0);
  *     - stateful block: state is rounded identically on both sides, so a 1 ULP step of an output does not feed back unless it
  *       moves a state rounding; the stated bound stays 1 / 4 float32 ULP;
- *     - near a zero crossing (|value| < 1e-3) an absolute floor of maxUlp * 2^-23 applies (maxUlp ULP of 1.0 in float32),
- *       as in part A: the ULP of a tiny cancellation result is meaningless;
- *     - KALMAN_FILTER (state kept in float64 by the interpreter, in float32 by C): each tick adds one float32 rounding of
- *       x and P (relative 2^-24) on the C side; the filter contracts, the carried error is bounded by the rounding of the
- *       n = 2 stored quantities amplified by |A|, |K| <= 2: absolute 4 * 2^-24 * max(1, |v|) (2 ULP of 1.0). Observed 1.5 * 2^-24.
- *       The strict 4-ULP relative check fails (innovation 7 ULP, a cancellation y - C x) and is pinned as a FINDING CANDIDATE.
+ *     - no absolute floor near zero: the float32 ULP distance of the value itself is used down to the subnormals, because
+ *       a floor of maxUlp * 2^-23 would accept thousands of ULP at |v| ~ 1e-3;
+ *     - KALMAN_FILTER (state kept in float64 by the interpreter, in float32 by C): x_hat, y_hat and kg carry one float32
+ *       rounding of x / P per tick (relative 2^-24 of the LARGEST state component, which couples into the others through A),
+ *       damped by the filter, so the bound is vector-wise: |dx_i| <= 8 * 2^-24 * max_j |x_j| (observed 2.5 * 2^-24; the
+ *       small component x_hat[1] reaches 5 float32 ULP of itself, which is why a per-element ULP bound is wrong here). The
+ *       innovation y - C x is a cancellation of operands that differ by that state rounding, so its relative difference is
+ *       unbounded by construction (observed up to 200 ULP, absolute 1.5 * 2^-24); it is NOT reported as equal: the whole
+ *       block is checked at 4 ULP in an it.fails FINDING CANDIDATE, and only x_hat / y_hat / kg are asserted as passing.
  *   The difference to a true float32 target (Simulink 'single' rounds every operation) is a separate question, not tested here.
  * ---------------------------------------------------------------------------------------------------------------------
  */
@@ -200,11 +205,16 @@ const combine = (scs: Scenario[]): Combined => {
 };
 
 // ------------------------------------------------------------------ comparison in float32 ULP
-const F32_ONE = 2 ** -23;
-const LIBM_CALL = /\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log10|log2|log1p|pow|sqrt|cbrt|hypot)\s*\(/;
+const LIBM_CALL_G = /\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log10|log2|log1p|pow|powf|sqrt|sqrtf|cbrt|hypot|sinf|cosf|tanf|expf|logf)\s*\(/g;
+const libmCallsOf = (sources: ParitySources): Set<string> =>
+  new Set(sources.files.filter((f) => f.name.endsWith('.c')).flatMap((f) => [...f.content.matchAll(LIBM_CALL_G)].map((m) => m[1])));
 interface Cmp { detail?: string; values: number; worst: number }
-/** absSlack (units of 2^-24 * max(1, |value|)): extra absolute allowance for a derived per-state-rounding bound (KALMAN_FILTER only). */
-const compareF32 = (label: string, a: PerTick, b: PerTick, probes: string[], maxUlp: number, absSlack = 0, steps = STEPS): Cmp => {
+/**
+ * Plain float32 ULP distance, no absolute floor: ulpDistance(.., 'float32') is monotone over the whole float32 line including
+ * subnormals, so a tiny result near a zero crossing is judged by the ULP of the value itself. (An absolute floor would hide
+ * thousands of ULP near 1e-3.) Measured worst on this suite is 0 for every non-Kalman block, so no floor is needed.
+ */
+const compareF32 = (label: string, a: PerTick, b: PerTick, probes: string[], maxUlp: number, steps = STEPS): Cmp => {
   let values = 0;
   let worst = 0;
   for (let k = 0; k < steps; k++) {
@@ -217,14 +227,8 @@ const compareF32 = (label: string, a: PerTick, b: PerTick, probes: string[], max
         if (Number.isNaN(x[i]) && Number.isNaN(y[i])) continue;
         if (x[i] === y[i]) continue;
         const u = ulpDistance(x[i], y[i], 'float32');
-        if (Number.isFinite(x[i]) && Number.isFinite(y[i]) && Math.min(Math.abs(x[i]), Math.abs(y[i])) < 1e-3 && Math.abs(x[i] - y[i]) <= maxUlp * F32_ONE) {
-          worst = Math.max(worst, Math.min(u, maxUlp)); continue;
-        }
-        if (absSlack > 0 && Number.isFinite(x[i]) && Number.isFinite(y[i]) && Math.abs(x[i] - y[i]) <= absSlack * 2 ** -24 * Math.max(1, Math.abs(x[i]))) {
-          worst = Math.max(worst, u); continue;
-        }
         if (!Number.isFinite(u) || u > maxUlp || !Number.isFinite(x[i]) || !Number.isFinite(y[i])) {
-          return { detail: `${label}: first difference at tick ${k + 1} ${p}[${i}]: interpreter ${x[i]} vs C ${y[i]} (${u} float32 ULP, allowed ${maxUlp})`, values, worst };
+          return { detail: `${label}: first difference at tick ${k + 1} ${p}[${i}]: interpreter ${x[i]} vs C ${y[i]} (${u} float32 ULP, allowed ${maxUlp})`, values, worst: Math.max(worst, Number.isFinite(u) ? u : 0) };
         }
         worst = Math.max(worst, u);
       }
@@ -233,6 +237,22 @@ const compareF32 = (label: string, a: PerTick, b: PerTick, probes: string[], max
   return { values, worst };
 };
 
+/** Vector-wise relative bound: |dx_i| <= tol * 2^-24 * max_j |x_j| per probe and tick (error propagated through a coupled state, not a per-element ULP). */
+const compareNormwise = (label: string, a: PerTick, b: PerTick, probes: string[], tol: number): Cmp => {
+  let values = 0; let worst = 0;
+  for (let k = 0; k < STEPS; k++) for (const p of probes) {
+    const x = a[p]?.[k] ?? []; const y = b[p]?.[k] ?? [];
+    if (x.length !== y.length) return { detail: `${label}: tick ${k + 1} ${p}: length ${x.length} vs ${y.length}`, values, worst };
+    const norm = Math.max(...x.map(Math.abs));
+    for (let i = 0; i < x.length; i++) {
+      values++;
+      const d = Math.abs(x[i] - y[i]) / (2 ** -24 * norm);
+      if (!(d <= tol)) return { detail: `${label}: tick ${k + 1} ${p}[${i}]: interpreter ${x[i]} vs C ${y[i]}, ${d} x 2^-24 x max|x| (allowed ${tol})`, values, worst };
+      worst = Math.max(worst, ulpDistance(x[i], y[i], 'float32'));
+    }
+  }
+  return { values, worst };
+};
 const firstError = (log: string) => (log.split('\n').find((l) => /error:|warning:/.test(l)) ?? log.split('\n')[0]).trim().slice(0, 240);
 const STRICT_O0 = [...STRICT_PARITY_FLAGS, '-O0'];
 
@@ -254,7 +274,22 @@ interface F32Outcome {
 
 /** Types whose interpreter keeps state unrounded while C stores it as float (derivation in the header comment). */
 const STATE_ROUNDING_TYPES = new Set(['KALMAN_FILTER']);
-const STATE_ROUNDING_SLACK = 4;
+/** The block is itself a libm source (the sine stimulus is subtracted from every model, so it has to be named). */
+const LIBM_BLOCKS = new Set(['WaveformGen']);
+let baselineCalls: Set<string> | undefined;
+const getBaselineCalls = (): Set<string> => {
+  if (baselineCalls) return baselineCalls;
+  const specs: ModelSpec[] = [
+    { blocks: [{ id: 'k', type: 'Constant', params: { value: 0.7 } }, { id: 'g', type: 'GAIN' }], wires: ['k.out -> g.u'] },
+    { blocks: [{ id: 'w', type: 'WaveformGen', params: SINE_A }], wires: [] },
+  ];
+  const calls = new Set<string>();
+  for (const solver of SOLVERS) for (const sp of specs) {
+    const b = buildTyped(sp, { solver, dt: DT }, 'float32');
+    if (b.ok && b.ir) libmCallsOf(generateParitySources(b.ir)).forEach((c) => calls.add(c));
+  }
+  return (baselineCalls = calls);
+};
 
 const runF32 = async (type: string, solver: EmbeddedSolver): Promise<F32Outcome> => {
   const base: F32Outcome = { kind: 'equal', detail: '', values: 0, worst: 0, scenarios: 0, refusedOnlyInFloat32: [], strictIssue: '', libm: false, plainDetail: '' };
@@ -288,18 +323,32 @@ const runF32 = async (type: string, solver: EmbeddedSolver): Promise<F32Outcome>
     outcome = await compileAndRunParity(sources, harness, { flags: [...DEFAULT_PARITY_FLAGS, '-Wno-unused-function'] });
   }
   if (!outcome.ok) return { ...base, kind: 'differ', detail: `${type}/${solver}: C ${outcome.stage} failed: ${outcome.log.slice(0, 500)}` };
-  const libm = sources.files.some((f) => f.name.endsWith('.c') && LIBM_CALL.test(f.content));
+  const base0 = getBaselineCalls();
+  const libm = LIBM_BLOCKS.has(type) || [...libmCallsOf(sources)].some((c) => !base0.has(c));
   const c = parseParityOutput(built.ir, sources, comb.probes, outcome.stdout);
   let worst = 0;
   let values = 0;
   let plainDetail = '';
+  let innovationWorst = 0;
+  const maxUlp = libm ? 1 : 0;
   for (const m of comb.map) {
-    const slack = STATE_ROUNDING_TYPES.has(type) ? STATE_ROUNDING_SLACK : 0;
-    const cmp = compareF32(`${type}/${solver}/${m.scenario.name}`, interp.signals, c, m.probes, libm ? 4 : 1, slack);
+    const label = `${type}/${solver}/${m.scenario.name}`;
+    if (STATE_ROUNDING_TYPES.has(type)) {
+      const passing = m.probes.filter((p) => !p.endsWith('.innovation'));
+      const cmp = compareNormwise(label, interp.signals, c, passing, 8);
+      values += cmp.values; worst = Math.max(worst, cmp.worst);
+      if (cmp.detail) return { ...base, kind: 'differ', detail: cmp.detail, values, worst, libm };
+      const all = compareF32(label, interp.signals, c, m.probes, 4);
+      if (all.detail && plainDetail === '') plainDetail = all.detail;
+      const inn = m.probes.filter((p) => p.endsWith('.innovation'));
+      for (let k = 0; k < STEPS; k++) for (const p of inn) (interp.signals[p][k] ?? []).forEach((x, i) => { const u = ulpDistance(x, c[p][k][i], 'float32'); if (Number.isFinite(u)) innovationWorst = Math.max(innovationWorst, u); });
+      continue;
+    }
+    const cmp = compareF32(label, interp.signals, c, m.probes, maxUlp);
     values += cmp.values; worst = Math.max(worst, cmp.worst);
     if (cmp.detail) return { ...base, kind: 'differ', detail: cmp.detail, values, worst, libm };
-    if (slack > 0 && plainDetail === '') plainDetail = compareF32(`${type}/${solver}/${m.scenario.name}`, interp.signals, c, m.probes, libm ? 4 : 1).detail ?? '';
   }
+  if (innovationWorst > 0) REPORT[`float32KalmanInnovationWorstUlp_${solver}`] = innovationWorst;
   return { ...base, kind: 'equal', values, worst, scenarios: usable.length, libm, plainDetail };
 };
 
@@ -313,7 +362,7 @@ const F32_STRICT_PINS: Record<string, string> = Object.fromEntries(['euler', 'rk
 const F32_CASES = TYPES.flatMap((type) => SOLVERS.filter((s) => !(s === 'discrete' && hasContinuous(type))).map((solver) => ({ type, solver })));
 const f32Results = new Map<string, F32Outcome>();
 
-describe('V7B-1 float32 production profile: interpreter = generated C per block (float32 signals, <= 1 ULP, libm <= 4 float32 ULP)', () => {
+describe('V7B-1 float32 production profile: interpreter = generated C per block (float32 signals, 0 ULP for non-libm blocks, <= 1 ULP for libm blocks)', () => {
   beforeAll(async () => {
     const t0 = Date.now();
     const outs = await mapPool(F32_CASES, 4, (c) => runF32(c.type, c.solver));
@@ -607,8 +656,10 @@ describe('V7B-2 sanitizers with runtime (gcc -fsanitize=address,undefined -fno-s
 
 // ================================================================== 3. Diag blocks (D17)
 type Shape = { rows: number; cols: number } | { length: number };
-const VEC = (n: number) => Array.from({ length: n }, (_, i) => (i + 1) * 1.5 - 0.25); // 1.25, 2.75, 4.25, 5.75
-const MAT = (r: number, c: number) => Array.from({ length: r }, (_, i) => Array.from({ length: c }, (_, j) => (i * c + j + 1) * 0.5 - 1.75));
+// Inputs that are NOT exactly representable in float32 (0.1, 1/3, 2.1e-7, -0.7, 0.1 * k - 0.35), so that a float32 model
+// has to round them and an oracle without Math.fround would fail.
+const VEC = (n: number) => [0.1, 1 / 3, 2.1e-7, -0.7].slice(0, n);
+const MAT = (r: number, c: number) => Array.from({ length: r }, (_, i) => Array.from({ length: c }, (_, j) => (i * c + j + 1) * 0.1 - 0.35 + (i === j ? 1 / 3 : 0)));
 /** MATLAB diag oracle, written out by hand: vector -> n-by-n matrix (row-major), matrix -> min(m, n) diagonal vector. */
 const matlabDiag = (input: number[] | number[][]): { dims: number[]; values: number[] } => {
   if (typeof input[0] === 'number') {
@@ -630,6 +681,11 @@ const DIAG_TYPES = ['MatrixDiag', 'Diag', 'DiagExtract', 'ExtractDiag'];
 const flatten = (v: unknown): number[] => (Array.isArray(v) ? v.flatMap(flatten) : [typeof v === 'boolean' ? (v ? 1 : 0) : Number(v)]);
 
 describe('V7B-3 Diag blocks follow MATLAB diag (D17): the input shape decides', () => {
+  it('the diag inputs are not exact in float32 (the float32 rows test the rounding)', () => {
+    const all = DIAG_CASES.flatMap((c) => (c.input as unknown[]).flat() as number[]);
+    expect(all.filter((x) => Math.fround(x) !== x).length).toBe(all.length);
+  });
+
   it('the hand oracle itself: diag([a b]) and diag of a 2x3 / 3x2 matrix', () => {
     expect(matlabDiag([7, 8])).toEqual({ dims: [2, 2], values: [7, 0, 0, 8] });
     expect(matlabDiag([[1, 2, 3], [4, 5, 6]])).toEqual({ dims: [2], values: [1, 5] });
