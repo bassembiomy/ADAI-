@@ -6,13 +6,14 @@
  * Oracles: hand-derived fixed points and closed-form integrals (stated in the comment of each case), never the
  * engine's own output.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { XbridgesEngine } from '../XbridgesEngine';
 import { Solvers } from '../Solvers';
 import { buildModel, runModel, type ModelSpec } from '../testkit';
 import { evaluateDOEModelDetailed, evaluateLegacyDOEEquationDetailed } from '../../doe/modelEvaluator';
+import { fitRSM, normalizeInputDataset } from '../../doe/statistics';
 import { createVLabDOEBlock, createXBridgesDOEBlock, validateDOEModelResult } from '../../doe/integration';
 
 const codes = (d: { code: string }[]) => d.map((x) => x.code);
@@ -89,7 +90,7 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(solve(slow, { algTol: 1e-6, maxIter: 5 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
       expect(solve(slow, { algTol: 1e-6, maxIter: 12 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
-    it('a tighter algTol needs more iterations: maxIter 12 converges at 1e-6 but not at 1e-10 (|e| < 4.6e-4 needs 19)', () => {
+    it('a tighter algTol needs more iterations: maxIter 12 converges at 1e-6 but not at 1e-10 (|e| < 4.6e-4 needs 18)', () => {
       expect(solve(slow, { algTol: 1e-10, maxIter: 12 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
       expect(solve(slow, { algTol: 1e-10, maxIter: 60 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
     });
@@ -312,7 +313,7 @@ describe('3. D2 blocks drive an Integrator: the integral is exact in closed form
   // Tight tolerances (RelTol 1e-8, AbsTol 1e-10): the solver's truncation error is far below the 1e-5 / 2e-6 budget, so what is left is the event handling.
   const TIGHT = { relTol: 1e-8, absTol: 1e-10 };
   for (const c of cases) for (const solver of VARIABLE) for (const mode of ['batch', 'live'] as const) {
-    // FINDING CANDIDATE: live DEADZONE, crossing exactly on the 0.01 output grid (t = 0.7 and 1.5): the step that starts on the crossing holds the
+    // FINDING CANDIDATE: live DEADZONE, crossing exactly on the 0.01 output grid (t = 1.5; t = 0.7 is 0.7000000000000001, only just off it): the step that starts on the crossing holds the
     // region decided at its start (u == limit is inside), so the whole step [1.5, 1.51] (u - 0.5 > 0) is lost: error h^2 / 2 = 5e-5 > 1e-5.
     const known = c.name.startsWith('DEADZONE') && mode === 'live';
     (known ? it.fails : it)(`${c.name}, ${solver} ${mode}, RelTol 1e-8: error <= ${c.tol}`, () => {
@@ -320,6 +321,20 @@ describe('3. D2 blocks drive an Integrator: the integral is exact in closed form
       expect(Math.abs(v - c.exact), `got ${v}, exact ${c.exact}`).toBeLessThanOrEqual(c.tol);
     }, 120_000);
   }
+  describe('dead-zone crossing on and off the live output grid (h = 0.01), RelTol 1e-8', () => {
+    // u = t, dead zone [-10, L], integral over [0, 2] = int_L^2 (t - L) dt = (2 - L)^2 / 2.
+    const dz = (L: number): ModelSpec => ({ blocks: [{ id: 'clk', type: 'Clock' }, { id: 'b', type: 'DEADZONE', params: { lowerLimit: -10, upperLimit: L } }, x], wires: ['clk.clk -> b.u', 'b.y -> x.in'] });
+    for (const solver of VARIABLE) {
+      it(`${solver}: crossing at t = 1.505 (between grid points): error <= 1e-5`, () => {
+        expect(Math.abs(integral(dz(1.505), solver, 2, 'live', 0.01, TIGHT) - (2 - 1.505) ** 2 / 2)).toBeLessThanOrEqual(1e-5);
+      }, 120_000);
+      // FINDING CANDIDATE: crossing exactly on the grid (t = 1.5, exact in binary): the step starting there loses h^2 / 2 = 5e-5.
+      it.fails(`${solver}: crossing exactly at t = 1.5 (on the grid): error <= 1e-5`, () => {
+        expect(Math.abs(integral(dz(1.5), solver, 2, 'live', 0.01, TIGHT) - 0.125)).toBeLessThanOrEqual(1e-5);
+      }, 120_000);
+    }
+  });
+
   // Default tolerances (RelTol 1e-3, AbsTol 1e-6): the integrand of the Relay, Switch and PWM cases is piecewise constant, so with the events located the
   // integral must not depend on the tolerance (error <= 2e-6).
   for (const c of cases.filter((k) => k.tol === 2e-6)) for (const solver of VARIABLE) for (const mode of ['batch', 'live'] as const) {
@@ -380,14 +395,15 @@ describe('4. DOE diagnostic codes: one recipe per emitted code, each asserts cod
   const lv = (name: string, levels: unknown) => ({ factorName: name, levels });
   const okTag = [lv('a', [{ level: 0, meanY: 9, snr: 0 }]), lv('b', [{ level: 0, meanY: 11, snr: 0 }])];
   const okNeuron = { inputs: [0, 1], coeffs: [0, 1, 0, 0, 0, 0] };
+  const stat = (d: { headers: string[]; data: unknown[][] }): Diag[] => fitRSM(d as never).diagnostics ?? [];
   const validate = (m: unknown): Diag[] => validateDOEModelResult(m as never);
   const evalModel = (m: unknown, ins: unknown[] = [1, 2]): Diag[] => { const r = evaluateDOEModelDetailed(m, ins as number[]); expect(r.success).toBe(false); expect(Number.isNaN(r.value)).toBe(true); return r.diagnostic ? [r.diagnostic] : []; };
   const legacy = (eq: string, names: string[], ins: number[]): Diag[] => { const r = evaluateLegacyDOEEquationDetailed(eq, names, ins); expect(r.success).toBe(false); return r.diagnostic ? [r.diagnostic] : []; };
   // A legacy result that validates but has no coefficients to synthesize a deployment from.
   const legacyNoDeployment = { modelType: 'RSM', factorNames: ['a'], responseName: 'y' };
 
-  // The code each recipe must produce. Every code is 'error' in the source (severity is asserted per recipe, not assumed).
-  const recipes: [string, () => Diag[]][] = [
+  // The code each recipe must produce, with the severity the source gives it (error unless the third element says warning).
+  const recipes: [string, () => Diag[], ('error' | 'warning')?][] = [
     // validateDOEModelResult
     ['UNSUPPORTED_MODEL_TYPE', () => validate(rsm({ modelType: 'Foo' }))],
     ['MISSING_FACTORS', () => validate(rsm({ factorOrder: [] }))],
@@ -436,17 +452,31 @@ describe('4. DOE diagnostic codes: one recipe per emitted code, each asserts cod
     ['EMPTY_FACTOR_LEVELS', () => evalModel(taguchi([lv('a', []), okTag[1]]))],
     ['NON_FINITE_LEVEL_STATISTIC', () => evalModel(taguchi([lv('a', [{ level: 0, meanY: Number.NaN, snr: 0 }]), okTag[1]]))],
     ['UNSUPPORTED_MODEL_TYPE', () => evalModel(rsm({ modelType: 'Foo' }))],
+    // statistics.ts: normalizeInputDataset (reached through fitRSM) and fitRSM
+    ['INVALID_HEADERS', () => stat({ headers: ['y'], data: [[1]] })],
+    ['DUPLICATE_HEADER', () => stat({ headers: ['a', 'a', 'y'], data: [[1, 2, 3]] })],
+    ['EMPTY_DATASET', () => stat({ headers: ['a', 'y'], data: [] })],
+    ['RAGGED_ROW', () => stat({ headers: ['a', 'y'], data: [[1, 2], [3]] })],
+    ['NON_FINITE_INPUT', () => normalizeInputDataset({ headers: ['a', 'y'], data: [[1, Number.NaN]] }).diagnostics],
+    // y = 5 for every row: variance 0 (4 rows, 1 factor: 3 terms, so 1 residual df)
+    ['ZERO_VARIANCE_RESPONSE', () => stat({ headers: ['a', 'y'], data: [[-1, 5], [0, 5], [1, 5], [2, 5]] }), 'warning'],
+    // 2 rows < 3 terms of a 1-factor quadratic
+    ['INSUFFICIENT_DEGREES_OF_FREEDOM', () => stat({ headers: ['a', 'y'], data: [[0, 1], [1, 2]] }), 'warning'],
+    // every row has a = 1: coded column is constant, the quadratic design matrix is singular
+    ['RANK_DEFICIENT', () => stat({ headers: ['a', 'y'], data: [[1, 1], [1, 2], [1, 3], [1, 4]] })],
+    // 3 rows = 3 terms: residual df 0
+    ['SATURATED_DESIGN_UNESTIMABLE_INFERENCE', () => stat({ headers: ['a', 'y'], data: [[-1, 1], [0, 3], [1, 2]] }), 'warning'],
     // evaluateLegacyDOEEquationDetailed
     ['INVALID_EQUATION_STRING', () => legacy('', ['a'], [1])],
     ['SECURITY_VALIDATION_FAILED', () => legacy('y = process', ['a'], [1])],
     ['EQUATION_PARSE_ERROR', () => legacy('y = 2 +* ', ['a'], [1])],
   ];
 
-  for (const [code, run] of recipes) {
+  for (const [code, run, severity = 'error'] of recipes) {
     it(`${code}: ${run.toString().replace(/\s+/g, ' ').slice(6, 70)}`, () => {
       const d = run().filter((x) => x.code === code);
       expect(d.length, `no ${code} in the diagnostics`).toBeGreaterThan(0);
-      expect(d.every((x) => x.severity === 'error')).toBe(true);
+      expect(d.every((x) => x.severity === severity), `severity of ${code}`).toBe(true);
     });
   }
 
@@ -458,23 +488,42 @@ describe('4. DOE diagnostic codes: one recipe per emitted code, each asserts cod
     expect(evaluateLegacyDOEEquationDetailed('y = a + 2 b', ['a', 'b'], [3, 4])).toMatchObject({ success: true, value: 11 });
   });
 
-  it('coverage: every diagnostic code literal in integration.ts and modelEvaluator.ts has a recipe (all emission forms: code: \'..\', "..", `..`)', () => {
-    const dir = join(__dirname, '..', '..', 'doe');
-    const found = new Set<string>();
-    for (const f of ['integration.ts', 'modelEvaluator.ts']) {
-      const src = readFileSync(join(dir, f), 'utf8');
-      for (const m of src.matchAll(/\bcode\s*[:=]\s*['"`]([A-Z][A-Z0-9_]+)['"`]/g)) found.add(m[1]);
-      for (const m of src.matchAll(/['"`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"`]/g)) if (/^(?:[A-Z]+_)+[A-Z]+$/.test(m[1]) && m[1] !== 'DOE_MODEL') found.add(m[1]);
+  // Every non-test .ts file of src/engine/doe is scanned (directory listing, no fixed list). Emission forms: `code: '..'` / `code = '..'` in any
+  // quote style, plus any ALL_CAPS_WITH_UNDERSCORE string literal (catches helper calls such as warn('X', ..)); 'DOE_MODEL' is a block type, not a code.
+  const doeDir = join(__dirname, '..', '..', 'doe');
+  const doeSources = readdirSync(doeDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')).sort();
+  const codesByFile = (): Map<string, Set<string>> => {
+    const out = new Map<string, Set<string>>();
+    for (const f of doeSources) {
+      const src = readFileSync(join(doeDir, f), 'utf8');
+      const set = new Set<string>();
+      for (const m of src.matchAll(/\bcode\s*[:=]\s*['"`]([A-Z][A-Z0-9_]+)['"`]/g)) set.add(m[1]);
+      for (const m of src.matchAll(/['"`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"`]/g)) if (m[1] !== 'DOE_MODEL') set.add(m[1]);
+      out.set(f, set);
     }
+    return out;
+  };
+  it('coverage: every diagnostic code literal in every non-test file of src/engine/doe has a recipe, and every recipe names an emitted code', () => {
+    const byFile = codesByFile();
+    expect([...byFile.keys()]).toEqual(expect.arrayContaining(['integration.ts', 'modelEvaluator.ts', 'statistics.ts']));
+    const found = new Set([...byFile.values()].flatMap((s) => [...s]));
     const covered = new Set(recipes.map(([c]) => c));
     expect([...found].filter((c) => !covered.has(c)).sort()).toEqual([]);
     expect([...covered].filter((c) => !found.has(c)).sort()).toEqual([]);
-    expect(found.size).toBe(covered.size);
+    // 41 distinct codes: integration.ts 20, modelEvaluator.ts 22 (with NON_FINITE_INPUT, INVALID_FACTOR_INDEX shared, etc.), statistics.ts 9; union 41.
+    expect(found.size).toBe(41);
+    expect(byFile.get('statistics.ts')!.size).toBe(9);
   });
-  it('severity: every emitted diagnostic literal is severity error (no warning/info path exists)', () => {
-    for (const f of ['integration.ts', 'modelEvaluator.ts']) {
-      const src = readFileSync(join(__dirname, '..', '..', 'doe', f), 'utf8');
-      expect([...src.matchAll(/severity:\s*'(\w+)'/g)].every((m) => m[1] === 'error')).toBe(true);
+  it('severity: the codes the sources give severity warning are exactly ZERO_VARIANCE_RESPONSE, INSUFFICIENT_DEGREES_OF_FREEDOM, SATURATED_DESIGN_UNESTIMABLE_INFERENCE; the rest are error', () => {
+    const warn = new Set<string>();
+    for (const f of doeSources) {
+      const src = readFileSync(join(doeDir, f), 'utf8');
+      for (const m of src.matchAll(/code:\s*'([A-Z_]+)',\s*severity:\s*'(\w+)'/g)) {
+        expect(['error', 'warning']).toContain(m[2]);
+        if (m[2] === 'warning') warn.add(m[1]);
+      }
     }
+    expect([...warn].sort()).toEqual(['INSUFFICIENT_DEGREES_OF_FREEDOM', 'SATURATED_DESIGN_UNESTIMABLE_INFERENCE', 'ZERO_VARIANCE_RESPONSE']);
+    for (const [code, , sev = 'error'] of recipes) expect(sev === 'warning', code).toBe(warn.has(code));
   });
 });
