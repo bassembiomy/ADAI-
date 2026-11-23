@@ -1192,7 +1192,8 @@ const emitVectorElementwisePower: OperationEmitter = (state, operation, operatio
   if (outputId === undefined) return [];
   const output = requireSignal(state, outputId);
   const isFloat = output.numericType.kind === 'float32' || output.numericType.kind === 'float16';
-  const powFunc = isFloat ? 'powf' : 'pow';
+  const powCall = (base: string, exponent: string): string =>
+    isFloat ? `powf((float)(${base}), (float)(${exponent}))` : `pow(${base}, ${exponent})`;
   const hasExponentInput = operation.inputSignalIds.length > 1;
 
   if (output.shape.kind === 'scalar') {
@@ -1206,7 +1207,7 @@ const emitVectorElementwisePower: OperationEmitter = (state, operation, operatio
       operationIndex,
       0,
       outputId,
-      `${powFunc}(${baseExpr}, ${expExpr})`,
+      powCall(baseExpr, expExpr),
       layout,
       member,
     );
@@ -1246,7 +1247,7 @@ const emitVectorElementwisePower: OperationEmitter = (state, operation, operatio
       0,
       outputId,
       'xb_i',
-      `${powFunc}(${baseExpr}, ${expExpr})`,
+      powCall(baseExpr, expExpr),
       layout,
       member,
     ).map((line) => `    ${line}`),
