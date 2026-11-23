@@ -713,3 +713,36 @@ describe('XBV-017: a discrete block at Ts = 0.3 fires at every hit k * 0.3, neve
     }
   }, 60_000);
 });
+
+// ======================================================================================================
+// WP-21 E14 acceptance (controller): XBV-428, XBV-429
+// ======================================================================================================
+describe('XBV-428: minStep = maxStep is a valid fixed internal step; the last step before an output or stop time may be shorter', () => {
+  // x' = -x, x(0) = 1, h = 1e-3: x(1) = e^-1; a third-order method at h = 1e-3 is far inside 1e-5 relative.
+  for (const solver of ['ode23', 'ode45', 'ode23tb'] as const) {
+    it(`${solver} batch, minStep = maxStep = 1e-3 to t = 1: no error, x(1) = e^-1 within 1e-5`, () => {
+      const r = batchRun(decay(), solver, 1, { minStep: 1e-3, maxStep: 1e-3 });
+      expect(errorCodes(r.e)).toEqual([]);
+      expect(Math.abs(stateOf(r.e, 'x') - Math.exp(-1)) / Math.exp(-1)).toBeLessThanOrEqual(1e-5);
+    });
+    it(`${solver} live dt 0.1, minStep = maxStep = 1e-3 to t = 1.05: no error, x = e^-1.05 within 1e-5`, () => {
+      const r = liveRun(decay(), solver, { dt: 0.1, stop: 1.05, options: { minStep: 1e-3, maxStep: 1e-3 } });
+      expect(r.ok).toBe(true);
+      expect(errorCodes(r.e)).toEqual([]);
+      expect(Math.abs(r.values.x.at(-1)! - Math.exp(-1.05)) / Math.exp(-1.05)).toBeLessThanOrEqual(1e-5);
+    });
+  }
+});
+
+describe('XBV-429: batch runs start from the MATLAB initial step, not span / 50', () => {
+  // x' = -x, x0 = 1, f0 = -1, threshold AbsTol / RelTol = 1e-3 < |x0|: rh = 1 / (0.8 RelTol^pow), h0 = 0.8 RelTol^pow
+  // (ode45 pow 1/5, ode23 pow 1/3). For x' = -x the step at h0 is accepted, so the first major step lands at h0.
+  for (const [solver, pow] of [['ode45', 1 / 5], ['ode23', 1 / 3]] as const) {
+    it(`${solver} batch, RelTol 1e-9, AbsTol 1e-12, stop 10: the first major step is h0 = 0.8 RelTol^${pow.toFixed(3)} (within 1 %)`, () => {
+      const h0 = 0.8 * 1e-9 ** pow;
+      const r = batchRun(decay(), solver, 10, { relTol: 1e-9, absTol: 1e-12 });
+      const first = r.probe.outputTimes.find((t) => t > 0)!;
+      expect(Math.abs(first - h0) / h0, `first step ${first}, h0 ${h0}`).toBeLessThanOrEqual(0.01);
+    });
+  }
+});
