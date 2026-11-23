@@ -496,6 +496,47 @@ const pwmEvaluate = (ins: any[], p: any, state: any, time: number, ctx?: BlockEv
   }
   return { duty, carrier, phase };
 };
+/** First multiple of `seg` cycles of a carrier of frequency `freq` strictly after `time` (a time just below a multiple counts as before it: the blocks decide on the exact phase). */
+const nextCarrierBreak = (time: number, freq: number, seg: number, offsetCycles = 0): number | undefined => {
+  if (!(Number.isFinite(freq) && freq > 0) || !Number.isFinite(time) || !Number.isFinite(offsetCycles)) return undefined;
+  const k = Math.floor((time * freq + offsetCycles) / seg) + 1;
+  const tn = (k * seg - offsetCycles) / freq;
+  // The cycle count of `time` is still below the multiple (as the blocks compute it) but the division rounds onto `time`: the event is
+  // an ulp ahead, so the solver steps over it (a jump right at the start of a step).
+  return tn > time ? tn : time + 4 * Number.EPSILON * Math.max(Math.abs(time), 1e-300);
+};
+/** Same for the carriers whose phase the blocks take from absCarrierPhase (rounded to 1e-12 cycles: a time that rounds onto the multiple is on it). */
+const nextPhaseBreak = (time: number, freq: number, seg: number): number | undefined => {
+  if (!(Number.isFinite(freq) && freq > 0) || !Number.isFinite(time)) return undefined;
+  const phase = absCarrierPhase(time, freq);
+  const tn = time + ((Math.floor(phase / seg) + 1) * seg - phase) / freq;
+  return tn > time ? tn : time + 4 * Number.EPSILON * Math.max(Math.abs(time), 1e-300);
+};
+/** PWM carrier turning points and jumps: half a period for the triangle and square carriers, a quarter for the sine, a full period for the sawtooth carriers. */
+const pwmCarrierSegmentFraction = (carrierType: unknown): number =>
+  carrierType === 'sawtooth' || carrierType === 'inv_sawtooth' ? 1 : carrierType === 'sine' ? 0.25 : 0.5;
+
+/**
+ * Time-scheduled events of a block (contract `XBlock.nextEventTime`): the next time after `t` at which the block's output can
+ * jump or its zero-crossing function changes direction. A variable-step solver lands exactly on it, so no pulse or edge is
+ * skipped and no step holds more than one crossing (Simulink: the solver hits time-based events). The member is attached
+ * non-enumerable: the worker model is a structured clone of the enumerable members, and XbridgesEngine rebuilds it from the
+ * factory like the other function members.
+ */
+const NEXT_EVENT_TIME: Record<string, (p: any, state: any, t: number) => number | undefined> = {
+  PWM_GENERATOR: (p, _s, t) => nextPhaseBreak(t, Number(p.frequency), pwmCarrierSegmentFraction(p.carrierType)),
+  THREE_PHASE_PWM: (p, _s, t) => nextPhaseBreak(t, Number(p.frequency), 0.5),
+  SVPWM_GATE_GENERATOR: (p, _s, t) => nextPhaseBreak(t, 1 / Number(p.Ts), 0.5),
+  WaveformGen: (p, _s, t) => {
+    if (p.type !== 'Square') return undefined;
+    const freq = Number(p.freq);
+    const ph = Number(p.phase ?? 0) / (2 * Math.PI);
+    if (!(Number.isFinite(freq) && freq > 0) || !Number.isFinite(ph)) return undefined;
+    // The wave switches where freq * t + phase / (2 pi) is a multiple of 1/2.
+    return nextCarrierBreak(t, freq, 0.5, ph);
+  },
+  Step: (p, _s, t) => { const st = Number(p.stepTime ?? 1); return Number.isFinite(st) && st > t ? st : undefined; },
+};
 /** Three-phase PWM: normalized references and the carrier phase from the committed state (pure). */
 const threePhasePwmEvaluate = (ins: any[], p: any, state: any, time: number, ctx?: BlockEvalContext): { refs: number[]; phase: number; carrier: number } => {
   const freq = Number(p.frequency);
@@ -7161,6 +7202,8 @@ execute: (ins, p, state) => {
                                                                                 charge_rate: params.charge_rate ?? 5.0
                                                                               },
                                                                               isStateful: true,
+  // The clamp of the level and the voltage is a projection of the state at the major step (nextState), as the block did in place.
+  projectsState: true,
                                                                               inputs: [
                                                                                 createPort('I_L', 'I_L', 'input', 0, 'left', 'continuous'),
                                                                                 createPort('I_R', 'I_R', 'input', 0, 'left', 'continuous'),
@@ -7178,12 +7221,12 @@ execute: (ins, p, state) => {
                                                                               description: 'Simulates robot battery system. Integrates motor and static current draw to compute discharge rate, and charges at a fixed rate when docked.',
                                                                               execute: (ins: any[], p: any, state: any, time: number) => {
                                                                                 const nominal_voltage = Number(p.nominal_voltage ?? 12.0);
-                                                                                state.battery_level = Math.max(0, Math.min(100.0, state.battery_level ?? 100.0));
-                                                                                state.battery_voltage = nominal_voltage * (0.7 + 0.3 * (state.battery_level / 100.0));
-                                                                                return {
-                                                                                  outputs: [state.battery_level, state.battery_voltage],
-                                                                                  nextState: state
-                                                                                };
+                                                                                const battery_level = Math.max(0, Math.min(100.0, state.battery_level ?? 100.0));
+ const battery_voltage = nominal_voltage * (0.7 + 0.3 * (battery_level / 100.0));
+ return {
+ outputs: [battery_level, battery_voltage],
+ nextState: { ...state, battery_level, battery_voltage }
+ };
                                                                               },
                                                                               evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
                                                                                 const I_L = Number(ins[0] ?? 0);
@@ -9247,6 +9290,7 @@ execute: (ins, p, state) => {
                                                                                                             icon: 'graduation-cap',
                                                                                                             description: 'Computes occupancy probability grid, ICP scan matching pose correction, and detects topological loop closures to correct drift.',
                                                                                                             execute: (ins: any[], p: any, state: any, time: number) => {
+ const st: any = { ...state }; // the committed state is never written (a faulted step restores it exactly)
                                                                                                               const x_est = Number(ins[0] ?? 0);
                                                                                                               const y_est = Number(ins[1] ?? 0);
                                                                                                               const theta_est = Number(ins[2] ?? 0);
@@ -9256,13 +9300,13 @@ execute: (ins, p, state) => {
                                                                                                               const theta_true = Number(ins[6] ?? theta_est);
                                                                                                               const lidar_max_range = Number(p.lidar_max_range ?? 4.0);
 
-                                                                                                              if (!state.grid || state.grid.length !== 30) {
-                                                                                                                state.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
-                                                                                                                state.loop_closures = 0;
-                                                                                                                state.last_loop_closure_time = 0;
+                                                                                                              if (!st.grid || st.grid.length !== 30) {
+                                                                                                                st.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
+                                                                                                                st.loop_closures = 0;
+                                                                                                                st.last_loop_closure_time = 0;
                                                                                                               }
 
-                                                                                                              const nextGrid = state.grid.map((row: any) => [...row]);
+                                                                                                              const nextGrid = st.grid.map((row: any) => [...row]);
 
                                                                                                               const numBeams = lidar_ranges.length;
                                                                                                               const beamAngles = [];
@@ -9287,7 +9331,7 @@ execute: (ins, p, state) => {
                                                                                                               }
 
                                                                                                               if (!xbIsSeed(Number(p.seed)) || !Number.isFinite(x_est) || !Number.isFinite(y_est) || !Number.isFinite(theta_est) || !Number.isFinite(x_true) || !Number.isFinite(y_true) || !Number.isFinite(theta_true)) {
-    return xbParamError([state.grid, x_est, y_est, theta_est, [100, 0]].map((v) => (typeof v === 'number' && !Number.isFinite(v) ? 0 : v)), 'SLAM: the pose inputs must be finite numbers and seed a finite number.');
+    return xbParamError([st.grid, x_est, y_est, theta_est, [100, 0]].map((v) => (typeof v === 'number' && !Number.isFinite(v) ? 0 : v)), 'SLAM: the pose inputs must be finite numbers and seed a finite number.');
   }
   const draw = xbNoiseAt(Number(p.seed), time);
   const icp_noise_x = (draw() - 0.5) * 0.01;
@@ -9299,9 +9343,9 @@ execute: (ins, p, state) => {
                                                                                                               const theta_corr = Math.atan2(Math.sin(theta_true + icp_noise_theta), Math.cos(theta_true + icp_noise_theta));
 
                                                                                                               const dist_to_dock = Math.sqrt(Math.pow(x_est - 0.0, 2) + Math.pow(y_est - (-2.8), 2));
-                                                                                                              if (dist_to_dock < 0.35 && time - (state.last_loop_closure_time || 0) > 15.0) {
-                                                                                                                state.loop_closures = (state.loop_closures || 0) + 1;
-                                                                                                                state.last_loop_closure_time = time;
+                                                                                                              if (dist_to_dock < 0.35 && time - (st.last_loop_closure_time || 0) > 15.0) {
+                                                                                                                st.loop_closures = (st.loop_closures || 0) + 1;
+                                                                                                                st.last_loop_closure_time = time;
                                                                                                               }
 
                                                                                                               let matches = 0;
@@ -9322,11 +9366,11 @@ execute: (ins, p, state) => {
                                                                                                               }
                                                                                                               const map_accuracy = total_eval > 0 ? Math.round((matches / total_eval) * 100) : 100;
 
-                                                                                                              state.grid = nextGrid;
+                                                                                                              st.grid = nextGrid;
 
                                                                                                               return {
-                                                                                                                outputs: [nextGrid, x_corr, y_corr, theta_corr, [map_accuracy, state.loop_closures]],
-                                                                                                                nextState: state
+                                                                                                                outputs: [nextGrid, x_corr, y_corr, theta_corr, [map_accuracy, st.loop_closures]],
+                                                                                                                nextState: st
                                                                                                               };
                                                                                                             }
                                                                                                           }),
@@ -9907,6 +9951,7 @@ execute: (ins, p, state) => {
                                                                                                                           icon: 'graduation-cap',
                                                                                                                           description: 'Generates occupancy, obstacle, and free-space grid maps via Bayesian updates.',
                                                                                                                           execute: (ins: any[], p: any, state: any, time: number) => {
+ const st: any = { ...state }; // the committed state is never written (a faulted step restores it exactly)
                                                                                                                             if (time === 0 || time === 0.0) {
                                                                                                                               g_isMatlabActive = false;
                                                                                                                             }
@@ -9917,11 +9962,11 @@ execute: (ins, p, state) => {
 
                                                                                                                             const lidar_max_range = Number(p.lidar_max_range ?? 4.0);
 
-                                                                                                                            if (!state.grid || state.grid.length !== 30) {
-                                                                                                                              state.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
+                                                                                                                            if (!st.grid || st.grid.length !== 30) {
+                                                                                                                              st.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
                                                                                                                             }
 
-                                                                                                                            const nextGrid = state.grid.map((row: any) => [...row]);
+                                                                                                                            const nextGrid = st.grid.map((row: any) => [...row]);
                                                                                                                             const numBeams = lidar_ranges.length;
                                                                                                                             const beamAngles = [];
                                                                                                                             for (let i = 0; i < numBeams; i++) {
@@ -9944,14 +9989,14 @@ execute: (ins, p, state) => {
                                                                                                                               }
                                                                                                                             }
 
-                                                                                                                            state.grid = nextGrid;
+                                                                                                                            st.grid = nextGrid;
 
                                                                                                                             const obstacleGrid = nextGrid.map((row: number[]) => row.map(v => v > 20 ? v : 0));
                                                                                                                             const freeGrid = nextGrid.map((row: number[]) => row.map(v => v < -20 ? -v : 0));
 
                                                                                                                             return {
                                                                                                                               outputs: [nextGrid, obstacleGrid, freeGrid],
-                                                                                                                              nextState: state
+                                                                                                                              nextState: st
                                                                                                                             };
                                                                                                                           }
                                                                                                                         }),
@@ -10123,22 +10168,23 @@ execute: (ins, p, state) => {
                                                                                                                                 icon: 'graduation-cap',
                                                                                                                                 description: 'Computes velocity limits and safe local waypoint trajectories to avoid dynamic/unexpected obstacles.',
                                                                                                                                 execute: (ins: any[], p: any, state: any, time: number) => {
+ const st: any = { ...state }; // the committed state is never written (a faulted step restores it exactly)
                                                                                                                                   const ranges = ins[0] || [0, 0, 0, 0, 0, 0, 0, 0];
                                                                                                                                   const target_x = Number(ins[1] ?? 0);
                                                                                                                                   const target_y = Number(ins[2] ?? 0);
 
                                                                                                                                   const frontObstacle = ranges[0] < 0.4 || ranges[1] < 0.35 || ranges[7] < 0.35;
 
-                                                                                                                                  let currentMode = state.navState ?? 5;
+                                                                                                                                  let currentMode = st.navState ?? 5;
                                                                                                                                   if (currentMode !== 1 && currentMode !== 9 && currentMode !== 7) {
                                                                                                                                     if (frontObstacle) {
-                                                                                                                                      state.prevNavState = currentMode;
+                                                                                                                                      st.prevNavState = currentMode;
                                                                                                                                       currentMode = 7; // Obstacle Avoidance spin
                                                                                                                                     }
                                                                                                                                   } else if (currentMode === 7 && !frontObstacle) {
-                                                                                                                                    currentMode = state.prevNavState !== undefined ? state.prevNavState : 5;
+                                                                                                                                    currentMode = st.prevNavState !== undefined ? st.prevNavState : 5;
                                                                                                                                   }
-                                                                                                                                  state.navState = currentMode;
+                                                                                                                                  st.navState = currentMode;
 
                                                                                                                                   let max_v = 0.22;
                                                                                                                                   let max_w = 1.6;
@@ -10152,7 +10198,7 @@ execute: (ins, p, state) => {
 
                                                                                                                                   return {
                                                                                                                                     outputs: [safe_x, safe_y, [max_v, max_w], currentMode],
-                                                                                                                                    nextState: state
+                                                                                                                                    nextState: st
                                                                                                                                   };
                                                                                                                                 }
                                                                                                                               }),
@@ -12384,6 +12430,17 @@ execute: (ins, p, state) => {
   ...BUS_FACTORIES,
   ...POWERTRAIN_FACTORIES
 };
+
+/** The nextEventTime contract of a block type (undefined: none); the engine restores it on blocks whose model was cloned or spread. */
+export const nextEventTimeOf = (type: string) => Object.prototype.hasOwnProperty.call(NEXT_EVENT_TIME, type) ? NEXT_EVENT_TIME[type] : undefined;
+for (const [type, nextEventTime] of Object.entries(NEXT_EVENT_TIME)) {
+  const build = BLOCK_LIBRARY[type];
+  BLOCK_LIBRARY[type] = (id, params) => {
+    const block = build(id, params);
+    Object.defineProperty(block, 'nextEventTime', { value: nextEventTime, enumerable: false, writable: true, configurable: true });
+    return block;
+  };
+}
 
 /** Trigonometric and hyperbolic blocks are element-wise for vector and matrix inputs (Simulink Trigonometric Function). */
 for (const type of ['SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN', 'ACOT', 'ASEC', 'ACOSEC',

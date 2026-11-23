@@ -1,6 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
 import { XModel, XBlock, ModelDiagnostic, SolverOptions, BlockEvalContext } from './types';
-import { BLOCK_LIBRARY, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
+import { BLOCK_LIBRARY, nextEventTimeOf, resetTwinRunState, getPolynomialCoefficients, trimLeadingZeros, effectivePortUnit } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import { runModelChecks, getBlockSampleTime, evaluateBlockParameters, parameterKindsOf, describeParameterProblem } from './modelChecks';
 import { evaluateParameter } from './parameterEvaluation';
@@ -150,6 +150,11 @@ export class XbridgesEngine {
       }
     });
 
+    // The nextEventTime contract is non-enumerable: a model that was cloned, spread or sent to the worker has lost it.
+    this.model.blocks.forEach(b => {
+      const next = nextEventTimeOf(b.type);
+      if (next && typeof b.nextEventTime !== 'function') Object.defineProperty(b, 'nextEventTime', { value: next, enumerable: false, writable: true, configurable: true });
+    });
     this.model.blocks.forEach(b => {
       if (!b.execute) {
         // Exact-case key first (BLOCK_LIBRARY has e.g. 'Integrator' and 'INTEGRATOR'); case-insensitive only without an exact match.
@@ -165,6 +170,9 @@ export class XbridgesEngine {
             if (typeof member === 'function' && typeof (b as any)[key] !== 'function') (b as any)[key] = member;
           }
           b.execute = fresh.execute;
+          if (typeof fresh.nextEventTime === 'function' && typeof b.nextEventTime !== 'function') {
+            Object.defineProperty(b, 'nextEventTime', { value: fresh.nextEventTime, enumerable: false, writable: true, configurable: true });
+          }
           if (!b.inputs || b.inputs.length === 0) b.inputs = fresh.inputs;
           if (!b.outputs || b.outputs.length === 0) b.outputs = fresh.outputs;
           if (b.state === undefined) b.state = fresh.state;
@@ -1025,6 +1033,41 @@ export class XbridgesEngine {
       }
     }
     return zcValues;
+  }
+
+  /** True when a block schedules events in time (nextEventTime). */
+  public hasScheduledEvents(): boolean {
+    return this.executionOrder.some(b => typeof b.nextEventTime === 'function');
+  }
+
+  /**
+   * True when one block's own consecutive scheduled events after `time` are closer than `hMin` (a minimum-step violation: the
+   * solver cannot resolve that block). Events of different blocks may be as close as they like.
+   */
+  public ownScheduledEventsCloserThan(time: number, hHalfWidth: (t: number) => number, hMin: number): boolean {
+    for (const block of this.executionOrder) {
+      if (typeof block.nextEventTime !== 'function') continue;
+      try {
+        const a = block.nextEventTime(block.params, block.state, time);
+        if (a === undefined || !Number.isFinite(a) || !(a > time)) continue;
+        const b = block.nextEventTime(block.params, block.state, a + 2 * hHalfWidth(a));
+        if (b !== undefined && Number.isFinite(b) && b - a < hMin) return true;
+      } catch (err) { /* reported by the block itself */ }
+    }
+    return false;
+  }
+
+  /** The earliest scheduled event of any block after `time` (undefined: none). */
+  public nextScheduledEvent(time: number): number | undefined {
+    let best: number | undefined;
+    for (const block of this.executionOrder) {
+      if (typeof block.nextEventTime !== 'function') continue;
+      try {
+        const d = block.nextEventTime(block.params, block.state, time);
+        if (d !== undefined && Number.isFinite(d) && d > time && (best === undefined || d < best)) best = d;
+      } catch (err) { /* a block with invalid parameters reports its own error when it executes */ }
+    }
+    return best;
   }
 
   public hasZeroCrossingSignChange(zcPrev: Map<string, number[]>, zcCurr: Map<string, number[]>): boolean {

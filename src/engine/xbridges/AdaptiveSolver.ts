@@ -2,7 +2,7 @@
 // Variable-step explicit Runge-Kutta solvers: ode45 (Dormand-Prince) and ode23 (Bogacki-Shampine).
 // One error-controlled integration core serves the batch runs (Solvers.runFixedStep) and the live canvas step
 // (decision D3: the canvas controls the error with RelTol / AbsTol inside each output step).
-import { ConsecutiveCrossings, MAX_INTERNAL_STEPS_BATCH, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
+import { ConsecutiveCrossings, crossedOrTouched, MAX_INTERNAL_STEPS_BATCH, scheduledEvent, crossBracket, type ScheduleCache, MAX_INTERNAL_STEPS_LIVE, chatterMessage, crossingBlock, reportStepBudget } from './zeroCrossingGuard';
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
@@ -78,7 +78,7 @@ interface IntegrateConfig {
 }
 
 /** Bisection precision of an event time; the located bracket [tLow, tHigh] is at most this wide. */
-const EVENT_TIME_TOL = 1e-9;
+const EVENT_TIME_TOL = 1e-12;
 
 /** Step-size hint carried between the output steps of a live run, per engine and solver. */
 const LIVE_STEP_HINT = new WeakMap<object, Map<Tableau, number>>();
@@ -186,9 +186,11 @@ export class AdaptiveSolver {
       });
       engine.computeOutputs(mid, sMid);
       const zcMid = engine.getZeroCrossings(mid, sMid);
-      if (engine.hasZeroCrossingSignChange(zcLo, zcMid)) hi = mid; else lo = mid;
+      if (crossedOrTouched(zcLo, zcMid)) hi = mid; else lo = mid;
     }
-    return { tLow: lo, tHigh: hi };
+    // hi is the first point at or beyond the edge; a zero of the crossing function there has not switched the block yet (output = duty > carrier is
+    // false at a rising edge), so the bracket extends a little beyond it.
+    return { tLow: lo, tHigh: Math.min(hi + 2 * EVENT_TIME_TOL, tHi) };
   }
 
   /**
@@ -209,7 +211,9 @@ export class AdaptiveSolver {
     let outputsReady = cfg.outputsReady === true;
     // Major-step evaluation at the current base done (discontinuous blocks decide their mode at major steps only).
     let majorDone = false;
-    let event: { tLow: number; tHigh: number } | null = null;
+    let event: { tLow: number; tHigh: number; scheduled?: boolean } | null = null;
+    const hasSched = engine.hasScheduledEvents();
+    const sched: ScheduleCache = {};
     let zcBase: Map<string, number[]> | null = null;
     let baseStates: Map<string, any> | null = null;
     let rollbacks = 0; // consecutive trial-point fault rollbacks since the last accepted step
@@ -219,12 +223,33 @@ export class AdaptiveSolver {
 
     while (t < tEnd && !engine.hasFatalError()) {
       if (++passes > maxPasses) { reportStepBudget(engine, maxPasses, t, 'Variable-step solver'); return { ok: false, hNext: h }; }
+      if (event === null && hasSched) {
+        // Time-scheduled events (PWM carrier edges, Step, square waves): the solver lands exactly on each one.
+        const se = scheduledEvent(engine, t, tEnd, cfg.hMin, sched);
+        if (se === 'close') {
+          reportError(engine, 'STIFF_SOLVER_STEP_TOO_SMALL',
+            `Variable-step solver: scheduled events at t = ${t} are spaced closer than the minimum step ${cfg.hMin}; the requested accuracy cannot be met.`);
+          return { ok: false, hNext: h };
+        }
+        if (se !== null) event = se;
+      }
       const target = event === null ? tEnd : (t < event.tLow ? event.tLow : event.tHigh);
       const sliver = event !== null && t >= event.tLow;
+      if (sliver && event!.scheduled) {
+        // The bracket of a scheduled event is a few 1e-12 s wide: one explicit step with the left-hand derivative crosses it; the
+        // major step at its end decides the new modes and the new output.
+        if (!k1Valid) { engine.computeOutputs(t); k1 = engine.computeDerivatives(t); }
+        crossBracket(engine, t, event!.tHigh, k1);
+        t = event!.tHigh; cTime = 0.0; event = null;
+        k1Valid = false; majorDone = false; zcBase = null; baseStates = null;
+        if (!cfg.batch && t < tEnd) { engine.computeOutputs(t); engine.updateDiscreteStates(t); }
+        continue;
+      }
       const remaining = t === t0 && target === tEnd && cfg.span !== undefined ? cfg.span : target - t;
       let hTry = h;
       let reachesTarget = false;
-      if (hTry >= remaining - cfg.hMin) { hTry = remaining; reachesTarget = true; }
+      // A step within hMin of the target (at most 5 % of the interval, so a rejected step that shrinks is not stretched back) lands on it.
+      if (hTry >= remaining - Math.min(cfg.hMin, 0.05 * remaining)) { hTry = remaining; reachesTarget = true; }
       if (!reachesTarget && hTry < cfg.hMin) hTry = cfg.hMin;
 
       if (cfg.batch) {
@@ -283,7 +308,7 @@ export class AdaptiveSolver {
         continue;
       }
 
-      if (!sliver && event === null && hasZc) {
+      if (!sliver && (event === null || event.scheduled === true) && hasZc) {
         if (zcBase === null) {
           baseStates = snapshotStates(engine);
           engine.computeOutputs(t, baseStates);
@@ -291,13 +316,13 @@ export class AdaptiveSolver {
         }
         engine.computeOutputs(t + hTry, tr.candidate);
         const zcCurr = engine.getZeroCrossings(t + hTry, tr.candidate);
-        if (engine.hasZeroCrossingSignChange(zcBase, zcCurr)) {
+        if (crossedOrTouched(zcBase, zcCurr)) {
           const located = AdaptiveSolver.locateEvent(engine, t, t + hTry, baseStates!, tr.candidate, zcBase);
-          if (crossings.note(located.tHigh, cfg.hMin, EVENT_TIME_TOL)) {
+          if (crossings.note(located.tHigh, EVENT_TIME_TOL)) {
             reportError(engine, 'ZERO_CROSSING_CHATTER', chatterMessage(engine, crossingBlock(zcBase, zcCurr), t, 'Variable-step solver'));
             return { ok: false, hNext: h };
           }
-          event = located.tLow - t < cfg.hMin ? { tLow: t, tHigh: located.tHigh } : located;
+          event = located;
           continue; // same base state and first stage, new target
         }
       }
