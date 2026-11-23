@@ -166,12 +166,24 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
         { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } }, { id: 'gk', type: 'GAIN', params: { gain: k } }],
       wires: ['one.out -> s.in1', 's.out -> s.in2', 's.out -> p.in1', 's.out -> p.in2', 'p.y -> gk.u', 'gk.y -> s.in3'],
     });
-    for (const k of [1e-6, 1e-8]) {
+    for (const k of [1e-6, 1e-8, 1e-10]) {
       it(`y = 1 + y - ${k} y^2: y* = ${1 / Math.sqrt(k)} within algTol on the solution, rk4 over 10 steps, no error`, () => {
         const run = runModel(buildModel(kLoop(k)), { solver: 'rk4', dt: 0.1, stopTime: 1, probes: ['s.out'] });
         expect(run.diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)).toEqual([]);
         const ys = 1 / Math.sqrt(k);
         for (const v of run.signals['s.out']) expect(Math.abs(Number(v) - ys), `s.out = ${v}`).toBeLessThanOrEqual(1e-6 * (1 + ys));
+      });
+    }
+    // XBV-421 rework: a loop with no solution must stay fatal however small the inconsistency is relative to 1, as long as the residual
+    // |u| exceeds algTol (1 + |y|): y = u + y has no solution for u != 0; a damped or tiny step must never be taken as convergence.
+    for (const u of [1, 1e-2, 1e-4, 1e-5]) {
+      it(`y = ${u} + y has no solution: fatal ALGEBRAIC_LOOP_NOT_CONVERGED, no value carried on`, () => {
+        const r = solve(linearLoop(1, 1, u), {});
+        expect(r.codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+        expect(r.fatal).toBe(true);
+        const run = runModel(buildModel(linearLoop(1, 1, u)), { solver: 'rk4', dt: 0.1, stopTime: 0.5, probes: ['s.out'] });
+        expect(run.diagnostics.some((d) => d.code === 'ALGEBRAIC_LOOP_NOT_CONVERGED' && d.severity === 'error')).toBe(true);
+        expect(run.t.length).toBeLessThan(3);
       });
     }
     it('y = 1 + 1e10 * y is solvable in double precision: -1/(1e10 - 1) within 1e-6 relative, no error', () => {
