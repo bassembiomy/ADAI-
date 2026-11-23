@@ -219,11 +219,11 @@ describe('D3: the error does not depend on the output step (the controller works
       }
     });
   }
-  // FINDING CANDIDATE: ode23 accepts a step with no error although the true error is 9 %.
+  // Finding (now acceptance): ode23 accepts a step with no error although the true error is 9 %.
   // Derivation: Bogacki-Shampine stages for x' = -x, h = 1: k = (-1, -1/2, -5/8, -1/3); the error vector
   // e = (2/9 - 7/24, 1/3 - 1/4, 4/9 - 1/3, -1/8) gives e.k = 0.0694 - 0.0417 - 0.0694 + 0.0417 = 0, so the estimate is
   // blind at h * lambda = -1 and the live loop starts every output step with h0 = dt = 1. The solution is 1/3 instead of e^-1 (9 %).
-  it.fails('FINDING CANDIDATE: ode23 live, x\' = -x, dt = 1, RelTol 1e-6: the first step (h = dt) is accepted with a 9 % error', () => {
+  it('ode23 live, x\' = -x, dt = 1, RelTol 1e-6: the first step is not accepted with a 9 % error (XBV-423)', () => {
     const r = liveRun(decay(), 'ode23', { dt: 1, stop: 1, options: { relTol: 1e-6, absTol: ABS } });
     expect(Math.abs(r.values.x[1] - Math.exp(-1))).toBeLessThanOrEqual(2 * (1e-6 * Math.exp(-1) + ABS));
   });
@@ -345,7 +345,7 @@ describe('output times: the canvas time base lands on start + k dt, the last sam
   // XBV-427: SolverOptions declares outputTimes and stiffDetect (types.ts) but no solver reads them. A declared option must be implemented or
   // removed (as D3 removed ode113 / ode15s / ode23s).
   for (const opt of ['outputTimes', 'stiffDetect']) {
-    it.fails(`FINDING XBV-427: SolverOptions.${opt} is either not declared or read by a solver`, () => {
+    it(`XBV-427: SolverOptions.${opt} is either not declared or read by a solver`, () => {
       const root = join(__dirname, '..');
       const declared = new RegExp(`\\b${opt}\\??\\s*:`).test(readFileSync(join(root, 'types.ts'), 'utf8'));
       const read = ['Solvers.ts', 'AdaptiveSolver.ts', 'StiffSolver.ts', 'liveStep.ts', 'XbridgesEngine.ts', 'xbridgesWorker.ts', 'simulationConfig.ts']
@@ -394,10 +394,10 @@ function largestGap(p: Probe, t0: number, tEnd: number): number {
 }
 describe('maxStep caps the internal step (a pulse narrower than maxStep cannot be stepped over; here every gap is measured)', () => {
   const MAX = 0.01;
-  // FINDING CANDIDATE (live ode23 / ode45): the first internal step of a live run is h0 = dt and is not capped by maxStep.
+  // Finding (now acceptance) (live ode23 / ode45): the first internal step of a live run is h0 = dt and is not capped by maxStep.
   // Observed on x' = -x, dt = 1, maxStep = 0.01: the whole output step is one internal step of 1.0 (100 x maxStep).
   for (const solver of ['ode23', 'ode45'] as const) {
-    it.fails(`FINDING CANDIDATE: ${solver} live: the first internal step (h0 = dt = 1) exceeds maxStep ${MAX}`, () => {
+    it(`${solver} live: the first internal step is capped by maxStep ${MAX} (XBV-424)`, () => {
       const r = liveRun(decay(), solver, { dt: 1, stop: 1, options: { maxStep: MAX } });
       expect(largestGap(r.probe, 0, 1)).toBeLessThanOrEqual(MAX * (1 + 1e-9));
     });
@@ -407,9 +407,9 @@ describe('maxStep caps the internal step (a pulse narrower than maxStep cannot b
       expect(largestGap(late, 1, 2)).toBeLessThanOrEqual(MAX * (1 + 1e-9));
       expect(r.probe.commits).toBeGreaterThanOrEqual(100);
     });
-    // FINDING CANDIDATE (batch ode23 / ode45): the first step is h0 = (stop - start) / 50 = 0.2 > maxStep 0.01 (981 internal
+    // Finding (now acceptance) (batch ode23 / ode45): the first step is h0 = (stop - start) / 50 = 0.2 > maxStep 0.01 (981 internal
     // steps for T = 10, maxStep 0.01 instead of at least 1000).
-    it.fails(`FINDING CANDIDATE: ${solver} batch: the first step h0 = span / 50 exceeds maxStep ${MAX} (at least T / maxStep steps expected)`, () => {
+    it(`${solver} batch: the first step is capped by maxStep ${MAX}, at least T / maxStep steps (XBV-424)`, () => {
       const r = batchRun(ZERO, solver, 10, { maxStep: MAX });
       expect(r.probe.commits).toBeGreaterThanOrEqual(1000);
     });
@@ -461,9 +461,9 @@ describe('minStep: STIFF_SOLVER_STEP_TOO_SMALL when the tolerance cannot be met 
   });
   // By design (comment in AdaptiveSolver.integrate: "a step at the minimum step is accepted" in batch runs) the batch
   // ode23 / ode45 accept a step that misses the tolerance at minStep, silently.
-  // FINDING CANDIDATE: no diagnostic at all (not even a warning) when the batch ode23 / ode45 give up the tolerance at minStep.
+  // Finding (now acceptance): no diagnostic at all (not even a warning) when the batch ode23 / ode45 give up the tolerance at minStep.
   for (const solver of ['ode23', 'ode45'] as const) {
-    it.fails(`FINDING CANDIDATE: ${solver} batch: tolerance not met at minStep 0.5 is reported (STIFF_SOLVER_STEP_TOO_SMALL)`, () => {
+    it(`${solver} batch: tolerance not met at minStep 0.5 is reported (STIFF_SOLVER_STEP_TOO_SMALL, XBV-425)`, () => {
       const r = batchRun(decay(), solver, 1, { ...hard, minStep: 0.5, maxStep: 1 });
       expect(allCodes(r.e)).toContain('STIFF_SOLVER_STEP_TOO_SMALL');
     });
@@ -510,11 +510,11 @@ describe('invalid maxStep / minStep', () => {
       expect([...new Set(errorCodes(run(solver, mode, o)))]).toEqual(codes);
     });
   }
-  // FINDING CANDIDATE: the engine accepts maxStep <= 0, minStep <= 0 and minStep > maxStep without STIFF_SOLVER_INVALID_OPTION
+  // Finding (now acceptance): the engine accepts maxStep <= 0, minStep <= 0 and minStep > maxStep without STIFF_SOLVER_INVALID_OPTION
   // in most solver / mode combinations (only the batch ode23tb refuses the non-positive values; live ode23 / ode45 report the
   // misleading STIFF_SOLVER_STEP_TOO_SMALL for maxStep <= 0, the batch ode23 / ode45 run silently with a clamped step).
   // Expected: STIFF_SOLVER_INVALID_OPTION for every row, as the canvas does for the same texts.
-  it.fails('FINDING CANDIDATE: every invalid maxStep / minStep combination is refused with STIFF_SOLVER_INVALID_OPTION by every solver and mode', () => {
+  it('every invalid maxStep / minStep combination is refused with STIFF_SOLVER_INVALID_OPTION by every solver and mode (XBV-426)', () => {
     for (const [solver, mode, o] of ROWS) expect(errorCodes(run(solver, mode, o)), `${solver} ${mode} ${JSON.stringify(o)}`).toContain('STIFF_SOLVER_INVALID_OPTION');
   });
 });

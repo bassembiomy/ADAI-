@@ -112,6 +112,12 @@
    "date": "2026-11-23",
    "topic": "XBV-413 robot grids",
    "decision": "ROBOT_VACUUM_SLAM and ROBOT_VACUUM_MAPPING update their occupancy grids once per major step (Simulink discrete-update semantics), not at every solver stage; euler and rk4 now give the same grid. robot_vacuum_twin and robot_vacuum_full_system outputs change from step 0; both labs still run 2 s without errors and the map fills."
+  },
+  {
+   "id": "D19",
+   "date": "2026-11-23",
+   "topic": "XBV-427 dead solver options",
+   "decision": "SolverOptions.stiffDetect and outputTimes are removed: no solver, screen or saved model uses them, Simulink and MATLAB ode45 have no stiffness diagnostic, and output times stay on the k * fixedStep grid with the stop time hit exactly. Reversible on request (outputTimes could later be implemented as Simulink 'Output times')."
   }
  ],
  "wps": [

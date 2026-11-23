@@ -10,7 +10,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
   - S2 (crash, stop, freeze or silent no-op): 3 open
   - S3 (diagnostic, UI or convention deviation): 3 open
   - S4 (documentation): 4 open
-- Decisions recorded: 18; open: 0.
+- Decisions recorded: 19; open: 0.
 
 ## Work packages
 
@@ -341,6 +341,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - **D16** (2026-11-16, XBV-106 vector/matrix state-machine variables): Recorded as a product limitation, not fixed in WP-21: state-machine variables stay scalar; vector/matrix signals work inside an X-Bridges model and cross the state-machine boundary element by element (one scalar variable per element). Building vector/matrix variables is a feature (model, interpreter, C generator, validator, UI) estimated at 1-2 days; reversible on request.
 - **D17** (2026-11-22, XBV-306 diagonal blocks): MatrixDiag, Diag, DiagExtract and ExtractDiag follow MATLAB diag: the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal), as the embedded interpreter and generated C already did. The create/extract diagMode option is removed instead of enforced, so existing models and parity are unchanged. Reversible on request.
 - **D18** (2026-11-23, XBV-413 robot grids): ROBOT_VACUUM_SLAM and ROBOT_VACUUM_MAPPING update their occupancy grids once per major step (Simulink discrete-update semantics), not at every solver stage; euler and rk4 now give the same grid. robot_vacuum_twin and robot_vacuum_full_system outputs change from step 0; both labs still run 2 s without errors and the map fills.
+- **D19** (2026-11-23, XBV-427 dead solver options): SolverOptions.stiffDetect and outputTimes are removed: no solver, screen or saved model uses them, Simulink and MATLAB ode45 have no stiffness diagnostic, and output times stay on the k * fixedStep grid with the stop time hit exactly. Reversible on request (outputTimes could later be implemented as Simulink 'Output times').
 
 ## Deferred items (notes for follow-up WPs)
 
