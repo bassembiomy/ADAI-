@@ -6,6 +6,7 @@ import { ConsecutiveCrossings, crossedOrTouched, scheduledEvent, crossBracket, t
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
+import { stepLimitProblem } from './AdaptiveSolver';
 
 type Path = (string | number)[];
 interface Leaf { blockId: string; path: Path }
@@ -530,6 +531,11 @@ export class StiffSolver {
       reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', 'ode23tb requires relTol, absTol and the step > 0.');
       return false;
     }
+    const limitProblem = stepLimitProblem(engine.options?.minStep, engine.options?.maxStep);
+    if (limitProblem !== null) {
+      reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', `ode23tb: ${limitProblem}`);
+      return false;
+    }
     engine.computeOutputs(t);
     engine.updateDiscreteStates(t);
     if (engine.hasFatalError()) return false;
@@ -617,6 +623,11 @@ export class StiffSolver {
     const hMin = options.minStep ?? 1e-12;
     if (!(relTol > 0) || !(absTol > 0) || !(hMax > 0) || !(hMin > 0)) {
       reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', 'ode23tb requires relTol, absTol, maxStep and minStep > 0.');
+      return;
+    }
+    const limitProblem = stepLimitProblem(options.minStep, options.maxStep);
+    if (limitProblem !== null) {
+      reportError(engine, 'STIFF_SOLVER_INVALID_OPTION', `ode23tb: ${limitProblem}`);
       return;
     }
     engine.options = options;
