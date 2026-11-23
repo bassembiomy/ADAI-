@@ -4,7 +4,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 ## Summary
 
-- Work packages: 25 done of 29; 2 in progress; 2 to do.
+- Work packages: 25 done of 29; 2 in progress; 1 to do.
 - Findings: 7 open, 240 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
@@ -35,7 +35,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | WP-13b | Engine part B: algTol/maxIter, more rate ratios, zero crossings for D2 blocks once XBV-036 is fixed, DOE evaluator diagnostic codes (src/engine/doe) | done | S / F |
 | WP-14 | Worker parity and protocol | done | S / F |
 | WP-14b | Worker part B: snapshot round trip of every stateful block through the real client (ROBOT_VACUUM_COMM), cancel mid-batch, hybrid blocks with gear-shift stimulus after XBV-047, full node params and accumulated time in the parity reference | done | S / F |
-| WP-15 | Simulink goldens | todo | M+H / F |
+| WP-15 | Simulink goldens | waiting_matlab | M+H / F |
 | WP-16 | Canvas / interpreter parity and model corpus | done | S (harness + tests from controller spec, D7) / F (Opus, D8) |
 | WP-17 | Per-block code parity, registry closure, compile matrix, limits | done | S (harness + tests from controller spec, D7) / F (Opus, D8) |
 | WP-17b | Code parity part B: float32 production profile (per-block parity with float32 tolerances), clang sanitizers with runtime, DiagExtract/ExtractDiag/Diag | done | S / F |
@@ -74,8 +74,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. |
-| XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. |
+| XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. |
+| XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. |
 
 ### S4 - documentation (4)
 
