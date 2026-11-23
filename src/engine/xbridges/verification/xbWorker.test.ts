@@ -17,7 +17,7 @@ import { handleXbridgesWorkerMessage } from '../xbridgesWorker';
 import type { XbridgesWorkerRequest, XbridgesWorkerResponse } from '../xbridgesWorkerProtocol';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
 import { XbridgesWorkerClient } from '../../../services/xbridgesWorkerClient';
-import { buildModel, randomGraph } from '../testkit';
+import { buildModel, randomGraph, seedRange, seedsFromEnv } from '../testkit';
 
 type Spec = Parameters<typeof buildModel>[0];
 
@@ -106,7 +106,7 @@ describe('worker = canvas main thread, step by step', () => {
   }
 
   it('random graphs, seeds 1..15, rk4: identical states and outputs for 15 steps', () => {
-    for (let seed = 1; seed <= 15; seed++) {
+    for (const seed of seedsFromEnv(seedRange(1, 15))) {
       const { rows } = both(randomGraph(seed, { blocks: 12 }), 'rk4', 0.01, 15);
       rows.forEach((r, k) => {
         expect(r.worker.states, `seed ${seed} step ${k}`).toEqual(r.main.states);

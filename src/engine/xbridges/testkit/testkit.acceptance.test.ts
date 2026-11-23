@@ -30,7 +30,7 @@ import { BLOCK_LIBRARY } from '../BlockDefinitions';
 import { XbridgesEngine } from '../XbridgesEngine';
 import {
   buildModel, runModel, SOLVER_NAMES, stimulus, SPECIAL_VALUES, ulpDistance, withinTolerance, referenceIntegrate,
-  mulberry32, randomGraph, DEFAULT_RANDOM_GRAPH_TYPES, compileAndRunC,
+  mulberry32, randomGraph, DEFAULT_RANDOM_GRAPH_TYPES, compileAndRunC, seedRange, seedsFromEnv, SEED_BASE_ENV,
 } from './index';
 
 const errors = (d: { severity: string }[]) => d.filter((x) => x.severity === 'error');
@@ -265,5 +265,47 @@ describe('compileAndRunC (plan 7.1)', () => {
     });
     expect(r.ok).toBe(true);
     expect(ulpDistance(Number(r.stdout.trim()), Math.sin(0.5))).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('seedsFromEnv (WP-22 nightly seed rotation)', () => {
+  const FIXED = seedRange(1, 30);
+  it('seedRange is the inclusive integer range', () => {
+    expect(seedRange(1, 3)).toEqual([1, 2, 3]);
+    expect(() => seedRange(5, 4)).toThrow(/invalid range/);
+  });
+  it('default (XBV_SEED_BASE unset or blank): the fixed seeds, unchanged, as a copy', () => {
+    expect(seedsFromEnv(FIXED, {})).toEqual(FIXED);
+    expect(seedsFromEnv(FIXED, { [SEED_BASE_ENV]: '' })).toEqual(FIXED);
+    expect(seedsFromEnv(FIXED, { [SEED_BASE_ENV]: '   ' })).toEqual(FIXED);
+    expect(seedsFromEnv(FIXED, {})).not.toBe(FIXED);
+  });
+  it('XBV_SEED_BASE=123456: the same count of seeds from that base, deterministic across calls', () => {
+    const env = { [SEED_BASE_ENV]: '123456' };
+    const rotated = seedsFromEnv(FIXED, env);
+    expect(rotated).toHaveLength(FIXED.length);
+    expect(rotated[0]).toBe(123456);
+    expect(rotated[rotated.length - 1]).toBe(123456 + FIXED.length - 1);
+    expect(seedsFromEnv(FIXED, env)).toEqual(rotated);
+  });
+  it('keeps the count for any default list length, including a list of one and an empty list', () => {
+    expect(seedsFromEnv([7], { [SEED_BASE_ENV]: '0' })).toEqual([0]);
+    expect(seedsFromEnv([], { [SEED_BASE_ENV]: '9' })).toEqual([]);
+  });
+  it('rejects invalid values instead of falling back to the fixed seeds', () => {
+    for (const bad of ['abc', '-1', '1.5', '1e6', '0x10', '9007199254740993']) {
+      expect(() => seedsFromEnv(FIXED, { [SEED_BASE_ENV]: bad }), bad).toThrow(SEED_BASE_ENV);
+    }
+  });
+  it('reads process.env by default', () => {
+    const before = process.env[SEED_BASE_ENV];
+    try {
+      process.env[SEED_BASE_ENV] = '42';
+      expect(seedsFromEnv([1, 2])).toEqual([42, 43]);
+      delete process.env[SEED_BASE_ENV];
+      expect(seedsFromEnv([1, 2])).toEqual([1, 2]);
+    } finally {
+      if (before === undefined) delete process.env[SEED_BASE_ENV]; else process.env[SEED_BASE_ENV] = before;
+    }
   });
 });

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import {
   buildModel, runModel, runEmbedded, randomGraph, DEFAULT_RANDOM_GRAPH_TYPES, withinTolerance,
-  EMBEDDED_STEP_FOR_CANVAS_SAMPLE,
+  EMBEDDED_STEP_FOR_CANVAS_SAMPLE, seedRange, seedsFromEnv,
   type ModelSpec, type EmbeddedSolver,
 } from '../../engine/xbridges/testkit';
 import { XB_CAPABILITIES } from './xbCapabilities';
@@ -258,7 +258,7 @@ const CORPUS_NO_STEP_NO_INTEGRATOR = CORPUS_NO_STEP.filter((t) => t !== 'Integra
 const corpus = (name: string, types: string[]) => {
   describe(`V6 graph corpus ${name}: 30 seeds x {euler, rk4}, 30 steps, every block output`, () => {
     for (const solver of ['euler', 'rk4'] as const) {
-      for (let seed = 1; seed <= 30; seed++) {
+      for (const seed of seedsFromEnv(seedRange(1, 30))) {
         const key = `${name}|${solver}|${seed}`;
         const pin = CORPUS_PINS[key];
         const title = `seed ${seed} ${solver}: canvas = embedded`;
