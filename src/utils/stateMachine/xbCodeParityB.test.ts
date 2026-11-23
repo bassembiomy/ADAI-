@@ -773,6 +773,166 @@ describe('V7B-3 Diag blocks follow MATLAB diag (D17): the input shape decides', 
   });
 });
 
+// ================================================================== 4. KALMAN_FILTER with vector / matrix dimensions (XBV-435)
+/**
+ * The factory defaults size B and C for a scalar u and y, so the vector scenarios set A, B, C, Q, R, P0 explicitly. Equations as the
+ * block documents them (BlockDefinitions KALMAN_FILTER execute): each tick first updates with y(n) from the prior x[n|n-1], P[n|n-1]
+ * (x0 = 0, P0 given), then predicts with u(n):
+ *   S = C P C' + R,  K = P C' S^-1,  innovation = y - C x,  x+ = x + K innovation,  P+ = (I - K C) P,  y_hat = C x+,
+ *   x[n+1|n] = A x+ + B u,  P[n+1|n] = A P+ A' + Q.   Outputs: x_hat = x+, y_hat, innovation, kg = K row-major (n x m).
+ */
+const KF_A = [[1, 0.1], [0, 1]];
+const KF_B = [[0.005], [0.1]];
+const KF_Q = [[1e-4, 0], [0, 1e-4]];
+const KF_P0 = [[1, 0], [0, 1]];
+const KF_PARAMS_1OUT = { A: KF_A, B: KF_B, C: [[1, 0]], Q: KF_Q, R: [[0.01]], P0: KF_P0 };
+const KF_PARAMS_2OUT = { A: KF_A, B: KF_B, C: [[1, 0], [0, 1]], Q: KF_Q, R: [[0.01, 0], [0, 0.01]], P0: KF_P0 };
+const KF_STEPS = 20;
+interface KfCase { name: string; params: typeof KF_PARAMS_1OUT | typeof KF_PARAMS_2OUT; m: number; spec: ModelSpec; dims: Record<string, number[]> }
+const kfCase = (name: string, params: KfCase['params'], m: number): KfCase => {
+  const blocks: ModelSpec['blocks'] = [
+    { id: 'b', type: 'KALMAN_FILTER', params: params as unknown as Record<string, unknown> },
+    { id: 'su', type: 'WaveformGen', params: SINE_A },
+  ];
+  const wires = ['su.out -> b.u'];
+  // u is a scalar; y_meas, y_hat and the innovation are scalars for one output (the scalar-only WaveformGen stimulus cannot drive a length-1 vector; KALMAN_FILTER itself accepts [1]), vectors for two
+  const dims: Record<string, number[]> = { 'b.x_hat': [2], 'b.kg': [2, m] };
+  if (m > 1) { dims['b.y_hat'] = [m]; dims['b.innovation'] = [m]; }
+  if (m === 1) {
+    blocks.push({ id: 'sy', type: 'WaveformGen', params: SINE_B });
+    wires.push('sy.out -> b.y_meas');
+  } else {
+    blocks.push({ id: 'sy0', type: 'WaveformGen', params: SINE_B }, { id: 'sy1', type: 'WaveformGen', params: { ...SINE_A, freq: 0.53 } }, { id: 'mx', type: 'MUX' });
+    wires.push('sy0.out -> mx.in1', 'sy1.out -> mx.in2', 'mx.y -> b.y_meas');
+    dims['mx.y'] = [2]; dims['b.y_meas'] = [2];
+  }
+  return { name, params, m, spec: { blocks, wires }, dims };
+};
+const KF_CASES: KfCase[] = [kfCase('2 states, 1 input, 1 output (C = [1 0])', KF_PARAMS_1OUT, 1), kfCase('2 states, 1 input, 2 outputs (C = I2)', KF_PARAMS_2OUT, 2)];
+const KF_PROBES = ['x_hat', 'y_hat', 'innovation', 'kg'].map((p) => `b.${p}`);
+
+/** Independent float64 oracle written out by hand (explicit 1x1 / 2x2 inverse, no math.js). */
+const kfOracle = (p: KfCase['params'], u: number[], y: number[][]): Record<string, number[][]> => {
+  const m = p.C.length;
+  const mul = (a: number[][], b: number[][]) => a.map((r) => b[0].map((_, j) => r.reduce((s, v, k) => s + v * b[k][j], 0)));
+  const tr = (a: number[][]) => a[0].map((_, j) => a.map((r) => r[j]));
+  const add = (a: number[][], b: number[][]) => a.map((r, i) => r.map((v, j) => v + b[i][j]));
+  const sub = (a: number[][], b: number[][]) => a.map((r, i) => r.map((v, j) => v - b[i][j]));
+  const inv = (s: number[][]) => {
+    if (m === 1) return [[1 / s[0][0]]];
+    const det = s[0][0] * s[1][1] - s[0][1] * s[1][0];
+    return [[s[1][1] / det, -s[0][1] / det], [-s[1][0] / det, s[0][0] / det]];
+  };
+  let x = [[0], [0]];
+  let P = p.P0.map((r) => [...r]);
+  const out: Record<string, number[][]> = { 'b.x_hat': [], 'b.y_hat': [], 'b.innovation': [], 'b.kg': [] };
+  for (let k = 0; k < u.length; k++) {
+    const S = add(mul(mul(p.C, P), tr(p.C)), p.R);
+    const K = mul(mul(P, tr(p.C)), inv(S));
+    const inn = sub(y[k].map((v) => [v]), mul(p.C, x));
+    const xu = add(x, mul(K, inn));
+    const Pu = mul(sub([[1, 0], [0, 1]], mul(K, p.C)), P);
+    out['b.x_hat'].push(xu.map((r) => r[0]));
+    out['b.y_hat'].push(mul(p.C, xu).map((r) => r[0]));
+    out['b.innovation'].push(inn.map((r) => r[0]));
+    out['b.kg'].push(K.flat());
+    x = add(mul(p.A, xu), mul(p.B, [[u[k]]]));
+    P = add(mul(mul(p.A, Pu), tr(p.A)), p.Q);
+  }
+  return out;
+};
+
+interface KfRun { interp?: PerTick; c?: PerTick; error?: string }
+const kfRuns = new Map<string, KfRun>();
+const kfKey = (c: KfCase, precision: Precision, solver: EmbeddedSolver) => `${c.name}|${precision}|${solver}`;
+const KF_SOURCES = (c: KfCase) => (c.m === 1 ? ['su.out', 'sy.out'] : ['su.out', 'mx.y']);
+
+describe('V7B-4 KALMAN_FILTER with vector / matrix dimensions (XBV-435): interpreter = generated C, canvas engine = hand oracle', () => {
+  beforeAll(async () => {
+    for (const c of KF_CASES) for (const precision of ['float64', 'float32'] as Precision[]) for (const solver of ['euler', 'discrete'] as EmbeddedSolver[]) {
+      const key = kfKey(c, precision, solver);
+      const probes = [...KF_PROBES, ...KF_SOURCES(c)];
+      const b = buildTyped(c.spec, { solver, dt: DT, portDimensions: c.dims }, precision);
+      if (!b.ok || !b.ir) { kfRuns.set(key, { error: `build refused: ${JSON.stringify(b.diagnostics.filter((d) => d.severity === 'error').slice(0, 2))}` }); continue; }
+      const interp = interpretIr(b.ir, STEPS, probes);
+      if (interp.error) { kfRuns.set(key, { error: `interpreter: ${interp.error}` }); continue; }
+      const sources = generateParitySources(b.ir);
+      const out = await compileAndRunParity(sources, renderParityHarness(b.ir, sources, STEPS, probes), { flags: [...DEFAULT_PARITY_FLAGS, '-Wno-unused-function'] });
+      if (!out.ok) { kfRuns.set(key, { error: `C ${out.stage}: ${firstError(out.log)}` }); continue; }
+      kfRuns.set(key, { interp: interp.signals, c: parseParityOutput(b.ir, sources, probes, out.stdout) });
+    }
+  }, 300_000);
+
+  for (const c of KF_CASES) for (const precision of ['float64', 'float32'] as Precision[]) for (const solver of ['euler', 'discrete'] as EmbeddedSolver[]) {
+    const key = kfKey(c, precision, solver);
+    it(`KALMAN_FILTER ${c.name} ${precision} ${solver}: interpreter = C bit-exact on every output (state rounded on both sides after XBV-432)`, () => {
+      const r = kfRuns.get(key)!;
+      if (r.error) expect.fail(r.error);
+      let values = 0; let worst = 0;
+      for (let k = 0; k < STEPS; k++) for (const p of KF_PROBES) {
+        const x = r.interp![p][k]; const y = r.c![p][k];
+        expect(y.length, `${p} tick ${k + 1} length`).toBe(x.length);
+        x.forEach((v, i) => { values++; worst = Math.max(worst, ulpDistance(v, y[i], precision)); expect(y[i], `${p}[${i}] tick ${k + 1}`).toBe(v); });
+      }
+      REPORT[`kalmanVector_${c.m}out_${precision}_${solver}`] = { values, worstUlp: worst };
+      expect(values).toBe(STEPS * KF_PROBES.reduce((s, p) => s + r.interp![p][0].length, 0));
+    });
+  }
+
+  for (const c of KF_CASES) for (const solver of ['euler', 'discrete'] as EmbeddedSolver[]) {
+    it(`KALMAN_FILTER ${c.name} float32 ${solver}: innovation within 8 * 2^-24 * max(|y_meas|, |C x|) per tick, C = interpreter`, () => {
+      const r = kfRuns.get(kfKey(c, 'float32', solver))!;
+      if (r.error) expect.fail(r.error);
+      // Derivation: innovation = y_meas - C x is evaluated in double on float32-rounded operands and rounded once to float32 on both
+      // sides; the state x is rounded identically on both sides (XBV-432). Each operand carries at most 2^-24 relative error (half a
+      // float32 ULP), C x sums n <= 2 such products, and the final rounding adds 2^-24, so 8 * 2^-24 * max(|y_meas|, |C x|) bounds the
+      // difference of two evaluations whatever the cancellation. With bit-exact parity the measured worst is 0.
+      const ySrc = KF_SOURCES(c)[1];
+      let worstAbs = 0; let worstFraction = 0;
+      for (let k = 0; k < STEPS; k++) {
+        const yMeas = r.interp![ySrc][k];
+        const inI = r.interp!['b.innovation'][k]; const inC = r.c!['b.innovation'][k];
+        expect(inC.length).toBe(inI.length);
+        inI.forEach((v, i) => {
+          const cx = yMeas[i] - v;
+          const bound = 8 * 2 ** -24 * Math.max(Math.abs(yMeas[i]), Math.abs(cx));
+          const d = Math.abs(v - inC[i]);
+          worstAbs = Math.max(worstAbs, d);
+          if (bound > 0) worstFraction = Math.max(worstFraction, d / bound);
+          expect(d, `innovation[${i}] tick ${k + 1}: interpreter ${v} vs C ${inC[i]}`).toBeLessThanOrEqual(bound);
+        });
+      }
+      REPORT[`kalmanVectorInnovation_${c.m}out_float32_${solver}`] = { worstAbs, worstFractionOfBound: worstFraction };
+    });
+  }
+
+  for (const c of KF_CASES) {
+    it(`KALMAN_FILTER ${c.name}: canvas engine = independent float64 hand oracle over 20 ticks at 1e-12 relative`, () => {
+      const probes = [...KF_PROBES, ...KF_SOURCES(c)];
+      const run = runModel(buildModel(c.spec), { solver: 'euler', dt: DT, stopTime: DT * (KF_STEPS - 1), probes });
+      const errs = run.diagnostics.filter((d) => d.severity === 'error');
+      if (errs.length > 0) expect.fail(`canvas diagnostics: ${JSON.stringify(errs.slice(0, 2))}`);
+      const [uSrc, ySrc] = KF_SOURCES(c);
+      const u = run.signals[uSrc].slice(0, KF_STEPS).map((v) => flatten(v)[0]);
+      const y = run.signals[ySrc].slice(0, KF_STEPS).map((v) => flatten(v));
+      expect(u.length).toBe(KF_STEPS);
+      const want = kfOracle(c.params, u, y);
+      let worst = 0;
+      for (const p of KF_PROBES) for (let k = 0; k < KF_STEPS; k++) {
+        const got = flatten(run.signals[p][k]);
+        expect(got.length, `${p} tick ${k + 1} length`).toBe(want[p][k].length);
+        got.forEach((v, i) => {
+          const e = want[p][k][i];
+          const rel = e === v ? 0 : Math.abs(v - e) / Math.abs(e);
+          worst = Math.max(worst, rel);
+          expect(rel, `${p}[${i}] tick ${k + 1}: engine ${v} vs oracle ${e}`).toBeLessThanOrEqual(1e-12);
+        });
+      }
+      REPORT[`kalmanVectorOracle_${c.m}out_worstRelative`] = worst;
+    });
+  }
+});
+
 afterAll(() => {
   if (process.env.XBCP_REPORT_B) writeFileSync(process.env.XBCP_REPORT_B, JSON.stringify(REPORT, null, 1));
 });
