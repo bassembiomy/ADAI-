@@ -118,6 +118,20 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
         for (const v of run.signals['s.out']) expect(Number.isFinite(Number(v)), `s.out = ${v}`).toBe(true);
       });
     }
+    // XBV-418: every step of a run, not only the first output, solves the loop: s = -1/(g - 1) and the feedback gain output g s = -g/(g - 1),
+    // both within 1e-6 relative (a warm start from the previous step must not stop at a value that only meets algTol on s).
+    for (const g of [1e6, 1e10, 1e300]) for (const solver of ['euler', 'rk4']) {
+      it(`y = 1 + ${g} * y, ${solver} over 5 steps: s and the gain output exact at every step`, () => {
+        const run = runModel(buildModel(linearLoop(1, g, 1)), { solver, dt: 0.1, stopTime: 0.5, probes: ['s.out', 'gb.y'] });
+        const errs = run.diagnostics.filter((d) => d.severity === 'error').map((d) => d.code);
+        // g = 1e300: the Jacobian 1 - g is at the edge of double range, so the fatal ALGEBRAIC_LOOP_NOT_CONVERGED is also accepted (as in XBV-416).
+        if (g === 1e300 && errs.length) { expect([...new Set(errs)]).toEqual(['ALGEBRAIC_LOOP_NOT_CONVERGED']); return; }
+        expect(errs).toEqual([]);
+        const s = -1 / (g - 1), gy = -g / (g - 1);
+        for (const v of run.signals['s.out']) expect(Math.abs(Number(v) - s), `s.out = ${v}`).toBeLessThanOrEqual(1e-6 * Math.abs(s));
+        for (const v of run.signals['gb.y']) expect(Math.abs(Number(v) - gy), `gb.y = ${v}`).toBeLessThanOrEqual(1e-6 * Math.abs(gy));
+      });
+    }
     it('y = 1 + 1e10 * y is solvable in double precision: -1/(1e10 - 1) within 1e-6 relative, no error', () => {
       const r = solve(linearLoop(1, 1e10, 1), {});
       expect(r.codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
