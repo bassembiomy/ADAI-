@@ -1746,8 +1746,8 @@ function writeStateOutputs(
       if (kId !== undefined) writeSignal(runtime, kId, K.flat(), faults, operation);
 
       // Update internal state directly to avoid re-evaluating
-      runtime.stateSlots[xSlot.id] = xNext.map(r => r[0]!);
-      runtime.stateSlots[pSlot.id] = pNext.flat();
+      runtime.stateSlots[xSlot.id] = xNext.map(r => convertValue(r[0]!, xSlot.numericType, faults, operation));
+      runtime.stateSlots[pSlot.id] = pNext.flat().map(v => convertValue(v, pSlot.numericType, faults, operation));
     }
     return;
   }
@@ -1874,8 +1874,8 @@ function writeStateOutputs(
       if (innovationId !== undefined) writeSignal(runtime, innovationId, innovation.map(r => r[0]!), faults, operation);
       if (kId !== undefined) writeSignal(runtime, kId, K.flat(), faults, operation);
 
-      runtime.stateSlots[xSlot.id] = xHatFlat;
-      runtime.stateSlots[pSlot.id] = pHat.flat();
+      runtime.stateSlots[xSlot.id] = xHatFlat.map(v => convertValue(v, xSlot.numericType, faults, operation));
+      runtime.stateSlots[pSlot.id] = pHat.flat().map(v => convertValue(v, pSlot.numericType, faults, operation));
     }
     return;
   }
