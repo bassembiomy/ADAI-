@@ -23,12 +23,15 @@ export function crossingBlock(zcA: Map<string, number[]>, zcB: Map<string, numbe
 
 /**
  * Bisection predicate of event location: a sign change or a landing exactly on zero (a value that is zero there has already
- * switched its block: output = duty > carrier is false at the edge). Zero values at the base are ignored.
+ * switched its block: output = duty > carrier is false at the edge). A zero base followed by a non-zero value counts.
  */
 export function crossedOrTouched(zcA: Map<string, number[]>, zcB: Map<string, number[]>): boolean {
   for (const [blockId, a] of zcA) {
     const b = zcB.get(blockId);
-    if (b) for (let i = 0; i < a.length; i++) if (a[i] !== 0 && a[i] * b[i] <= 0) return true;
+    if (b) for (let i = 0; i < a.length; i++) {
+      // A zero base followed by a non-zero value leaves the surface: the mode must be decided at the new side (grid-exact events).
+      if (a[i] === 0 ? b[i] !== 0 && Number.isFinite(b[i]) : a[i] * b[i] <= 0) return true;
+    }
   }
   return false;
 }

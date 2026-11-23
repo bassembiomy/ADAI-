@@ -351,7 +351,9 @@ export class AdaptiveSolver {
       }
       k1 = tr.stages[lastStage];
       majorDone = false;
-      k1Valid = cfg.batch; // FSAL in batch runs; live steps recompute the first stage at the new base
+      // FSAL in batch runs, except after a located event landed: the new mode changes the derivative (re-evaluate k1).
+      // Live steps recompute the first stage at the new base.
+      k1Valid = cfg.batch && !(sliver && reachesTarget);
       zcBase = null;
       baseStates = null;
     }

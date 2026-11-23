@@ -779,12 +779,20 @@ export class XbridgesEngine {
       }
       return a === b;
     };
+    const isFiniteValue = (v: any): boolean => {
+      if (typeof v === 'number') return Number.isFinite(v);
+      if (Array.isArray(v)) return v.every(isFiniteValue);
+      if (v && typeof v === 'object') return Object.values(v).every(isFiniteValue);
+      return true;
+    };
     let prev = snapshot();
     const start = prev;
     const maxPasses = this.options?.algMaxPasses ?? 50;
     for (let pass = 0; pass < maxPasses; pass++) {
       this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
       const cur = snapshot();
+      // A diverged sweep (Infinity / NaN) is never a settled loop: Newton restarts from the pre-sweep values.
+      if (!cur.every(isFiniteValue)) break;
       const settled = cur.every((v, i) => settledValue(v, prev[i]));
       prev = cur;
       if (settled) return;
@@ -852,6 +860,7 @@ export class XbridgesEngine {
 
     for (let iter = 0; iter < maxIter; iter++) {
       const fz = evaluateF(z);
+      if (!fz.every(Number.isFinite)) { reportNotConverged(); return; }
       const g = z.map((zi, i) => zi - fz[i]);
       const gNorm = Math.max(...g.map(Math.abs));
 
@@ -863,10 +872,12 @@ export class XbridgesEngine {
       const J: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
       for (let j = 0; j < n; j++) {
         const zPerturbed = [...z];
-        zPerturbed[j] += eps;
+        // Perturbation scaled with |z_j| so a large loop variable keeps its significant digits in the difference.
+        const dz = eps * Math.max(1, Math.abs(z[j]));
+        zPerturbed[j] += dz;
         const fzPerturbed = evaluateF(zPerturbed);
         for (let i = 0; i < n; i++) {
-          const df_ij = (fzPerturbed[i] - fz[i]) / eps;
+          const df_ij = (fzPerturbed[i] - fz[i]) / dz;
           J[i][j] = (i === j ? 1 : 0) - df_ij;
         }
       }
@@ -890,6 +901,7 @@ export class XbridgesEngine {
 
     // Final residual check: |F(z) - z| relative to 1 + |z|.
     const fFinal = evaluateF(z);
+    if (!fFinal.every(Number.isFinite) || !z.every(Number.isFinite)) { reportNotConverged(); return; }
     const residual = Math.max(...z.map((zi, i) => Math.abs(fFinal[i] - zi) / (1 + Math.abs(zi))));
     if (!(residual <= algTol)) reportNotConverged();
     setZ(z);
