@@ -929,12 +929,19 @@ export class XbridgesEngine {
       } catch (err) { /* no direction */ }
       return null;
     };
+    // An accepted point must be a root of g to within algTol, plus the rounding noise of F itself (the larger of |z| and |F|).
+    const isRoot = (zb: number[]): boolean => {
+      const fb = evaluateF(zb);
+      if (!finite(fb)) return false;
+      return zb.every((zi, i) => Math.abs(zi - fb[i]) <= (algTol + 64 * 2.220446049250313e-16 * Math.max(Math.abs(zi), Math.abs(fb[i]))) * (1 + Math.abs(zi)));
+    };
     const finalize = (zf: number[]) => {
       evaluateF(zf);
       setZ(zf);
     };
 
     const HUGE_STEP = 1e8;
+    let pert = 1e-2; // start-point perturbation, relative to 1 + |z|
     const RESOLVED = 1e-9; // below this scaled residual the rounding of F dominates g and the measured step is noise
     let z = getZ();
     let fz: number[] | null = null;
@@ -958,7 +965,8 @@ export class XbridgesEngine {
       const gRel = relNorm(g, z);
       const gAbs = absNorm(g);
       if (gRel === 0) { finalize(z); return; }
-      resolved = gRel > RESOLVED;
+      // Resolved: the residual is well above the rounding noise of F, which scales with max(1, |z|, |F|).
+      resolved = g.some((gi, i) => Math.abs(gi) / Math.max(1, Math.abs(z[i]), Math.abs(fz![i])) > RESOLVED);
 
       {
         // Central differences (2n evaluations); the Richardson combination (4n) only where the cheap Jacobian is not
@@ -972,7 +980,8 @@ export class XbridgesEngine {
         if (!dir) {
           // Singular or zero Jacobian at this point (e.g. dF/dz = 0 at the start guess): move off the stationary point.
           if (k === maxIter) break;
-          z = z.map(v => v + 1e-2 * (1 + Math.abs(v)));
+          z = z.map(v => v + pert * (1 + Math.abs(v)));
+          pert = Math.min(pert * 10, 1e12); // consecutive perturbations grow geometrically to reach far roots
           fz = null; prevStep = null; prevRate = null;
           continue;
         }
@@ -984,8 +993,12 @@ export class XbridgesEngine {
       }
 
       // A step at rounding level (about 50 ulp) cannot shrink further: the iteration sits at the floor of double precision.
-      const atFloor = stepRel <= 1e-14;
-      if ((rate !== null && rate < 1) || atFloor) {
+      const atFloor = newtonStep && stepRel <= 1e-14;
+      // The step-size test applies to full Newton steps only; a damped (Levenberg-Marquardt) step is small by construction.
+      // A step more than 1e9 times the residual comes from a Jacobian below the noise of the finite differences (the
+      // loop is singular to working precision): such a step says nothing about the solution.
+      const reliable = newtonStep && stepSize <= 1e9 * gAbs;
+      if (reliable && ((rate !== null && rate < 1) || atFloor)) {
         const r = atFloor || rate === null ? 0 : rate;
         const rEff = Math.max(r, prevRate ?? 0);
         const err = atFloor ? 0 : rEff < 1 ? (stepRel * rEff) / (1 - rEff) : Infinity;
@@ -999,16 +1012,14 @@ export class XbridgesEngine {
           // The solution estimate must also be a near-root of g (a Jacobian too badly conditioned for the finite
           // differences gives steps that are small but wrong); otherwise keep iterating.
           const zb = (best as { z: number[]; u: number }).z;
-          const fb = evaluateF(zb);
-          if (finite(fb) && relNorm(residualOf(zb, fb), zb) <= 1e-3) { setZ(zb); return; }
+          if (isRoot(zb)) { setZ(zb); return; }
         }
       }
-      if (!resolved && best && (best as { z: number[]; u: number }).u <= algTol) {
+      if (reliable && !resolved && best && (best as { z: number[]; u: number }).u <= algTol) {
         // The residual is at the rounding floor before the step test is met: accept the Aitken limit only when its own
         // uncertainty (drift of the measured rate) is within algTol, and it is a near-root of g.
         const zb = (best as { z: number[]; u: number }).z;
-        const fb = evaluateF(zb);
-        if (finite(fb) && relNorm(residualOf(zb, fb), zb) <= 1e-3) { setZ(zb); return; }
+        if (isRoot(zb)) { setZ(zb); return; }
       }
       if (k === maxIter) break;
 
@@ -1033,12 +1044,14 @@ export class XbridgesEngine {
       }
       if (!accepted) {
         // No decrease along the direction: the Jacobian is not usable here, move off the point instead.
-        z = z.map(v => v + 1e-2 * (1 + Math.abs(v)));
+        z = z.map(v => v + pert * (1 + Math.abs(v)));
+          pert = Math.min(pert * 10, 1e12); // consecutive perturbations grow geometrically to reach far roots
         fz = null; prevStep = null; prevRate = null;
         continue;
       }
       const full = t === 1 && newtonStep;
       if (full) {
+        pert = 1e-2;
         prevRate = rate;
         prevStep = stepSize;
         prevStepRel = stepRel;
