@@ -795,7 +795,7 @@ const kfCase = (name: string, params: KfCase['params'], m: number): KfCase => {
     { id: 'su', type: 'WaveformGen', params: SINE_A },
   ];
   const wires = ['su.out -> b.u'];
-  // u is a scalar; y_meas, y_hat and the innovation are scalars for one output (a signal of length 1 is refused as a vector), vectors for two
+  // u is a scalar; y_meas, y_hat and the innovation are scalars for one output (the scalar-only WaveformGen stimulus cannot drive a length-1 vector; KALMAN_FILTER itself accepts [1]), vectors for two
   const dims: Record<string, number[]> = { 'b.x_hat': [2], 'b.kg': [2, m] };
   if (m > 1) { dims['b.y_hat'] = [m]; dims['b.innovation'] = [m]; }
   if (m === 1) {
