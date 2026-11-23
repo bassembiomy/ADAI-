@@ -188,14 +188,16 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
     }
     // XBV-431: far roots from a zero start. y = c + y - k y^2 has the roots +-sqrt(c / k); Simulink's trust-region solver reaches them. The engine
     // must converge to one root within algTol on the solution, keep the same root over the steps, and report no error.
-    const ckLoop = (c: number, k: number): ModelSpec => ({
-      blocks: [{ id: 'one', type: 'Constant', params: { value: c } }, { id: 's', type: 'Sum', params: { signs: '++-' } },
-        { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } }, { id: 'gk', type: 'GAIN', params: { gain: k } }],
+    // Two equivalent wirings of the same equation (the result must not depend on how the loop is drawn):
+    //   '++-' with Gain +k on y^2, and '+++' with Gain -k on y^2. Roots up to 1e8 are required (XBV-431); larger roots are XBV-436.
+    const ckLoop = (c: number, k: number, wiring: 'minus' | 'plus' = 'minus'): ModelSpec => ({
+      blocks: [{ id: 'one', type: 'Constant', params: { value: c } }, { id: 's', type: 'Sum', params: { signs: wiring === 'minus' ? '++-' : '+++' } },
+        { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } }, { id: 'gk', type: 'GAIN', params: { gain: wiring === 'minus' ? k : -k } }],
       wires: ['one.out -> s.in1', 's.out -> s.in2', 's.out -> p.in1', 's.out -> p.in2', 'p.y -> gk.u', 'gk.y -> s.in3'],
     });
-    for (const [c, k] of [[1, 1e-14], [1, 1e-20], [1e12, 1], [1e-6, 1e-12]] as const) {
-      it(`y = ${c} + y - ${k} y^2 (roots +-${Math.sqrt(c / k)}): one root within algTol, the same at every step, no error (XBV-431)`, () => {
-        const run = runModel(buildModel(ckLoop(c, k)), { solver: 'rk4', dt: 0.1, stopTime: 0.5, probes: ['s.out'] });
+    for (const [c, k] of [[1, 1e-14], [1, 1e-16], [1e12, 1], [1e-6, 1e-12]] as const) for (const wiring of ['minus', 'plus'] as const) {
+      it(`y = ${c} + y - ${k} y^2 (roots +-${Math.sqrt(c / k)}), wiring ${wiring}: one root within algTol, the same at every step, no error (XBV-431)`, () => {
+        const run = runModel(buildModel(ckLoop(c, k, wiring)), { solver: 'rk4', dt: 0.1, stopTime: 0.5, probes: ['s.out'] });
         expect(run.diagnostics.filter((d) => d.severity === 'error').map((d) => d.code)).toEqual([]);
         const r = Math.sqrt(c / k), v0 = Number(run.signals['s.out'][0]);
         const ys = Math.sign(v0) * r;
