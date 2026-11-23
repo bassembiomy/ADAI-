@@ -51,7 +51,7 @@ jobs:
       - run: npm ci
       - name: Nightly seed window (schedule only; push and PR runs keep the fixed seeds)
         if: github.event_name == 'schedule'
-        run: echo "XBV_SEED_BASE=$(( $(date -u +%Y%m%d) % 1000000 ))" >> "$GITHUB_ENV"
+        run: echo "XBV_SEED_BASE=$(( $(date -u +%s) / 86400 * 1000 ))" >> "$GITHUB_ENV"  # days since epoch x 1000: a new, non-overlapping window each night
       - name: Verification suites and test kit
         run: npx vitest run src/engine/xbridges/verification src/engine/xbridges/testkit --reporter=dot
       - name: X-Bridges regression (engine, components, worker client, state-machine xb*)
@@ -84,7 +84,7 @@ jobs:
       - run: npm ci
       - name: Nightly seed window (schedule only; push and PR runs keep the fixed seeds)
         if: github.event_name == 'schedule'
-        run: echo "XBV_SEED_BASE=$(( $(date -u +%Y%m%d) % 1000000 ))" >> "$GITHUB_ENV"
+        run: echo "XBV_SEED_BASE=$(( $(date -u +%s) / 86400 * 1000 ))" >> "$GITHUB_ENV"  # days since epoch x 1000: a new, non-overlapping window each night
       - name: Canvas vs interpreter parity (V6)
         run: npx vitest run src/utils/stateMachine/xbTriParity.test.ts --reporter=dot
       - name: Interpreter vs generated C, compile matrix, sanitizers, limits (V7)
@@ -95,7 +95,7 @@ jobs:
   mutation:
     # Nightly only (WP-22). Informational: a surviving mutant is reported in the report and the artifact, not a red run.
     name: Mutation run on the engine (22 mutants, nightly, continue-on-error)
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -108,8 +108,8 @@ jobs:
           node-version: 22
           cache: 'npm'
       - run: npm ci
-      - name: Mutation run (one mutant at a time, timeout per mutant 600 s)
-        run: npx tsx scripts/xbridges-verification/mutationRun.ts --timeout=600
+      - name: Mutation run (one mutant at a time, timeout per mutant 3 x the baseline run)
+        run: npx tsx scripts/xbridges-verification/mutationRun.ts
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v4

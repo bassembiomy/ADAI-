@@ -17,7 +17,7 @@
  *   npx tsx scripts/xbridges-verification/mutationRun.ts --check         validate the anchors only, run nothing
  *   npx tsx scripts/xbridges-verification/mutationRun.ts --limit=5       first five mutants (partial run; the report says so)
  *   npx tsx scripts/xbridges-verification/mutationRun.ts --only=1,9      selected mutants by number
- *   options: --timeout=<seconds per mutant, default 900>  --no-report
+ *   options: --timeout=<seconds per mutant, default 3 x the baseline run time, at least 120>  --no-report
  *
  * Plan: docs/superpowers/plans/2026-11-10-xbridges-full-verification.md (WP-22).
  */
@@ -93,7 +93,7 @@ export const MUTATIONS: Mutation[] = [
     what: 'crossing detection: strict sign change becomes a touch', extra: `${VERIFICATION}/xbSolvers.test.ts` },
   { id: 16, kind: 'off-by-one loop bound', file: `${ENGINE}/zeroCrossingGuard.ts`,
     before: 'return this.count > MAX_CONSECUTIVE_ZERO_CROSSINGS;', after: 'return this.count >= MAX_CONSECUTIVE_ZERO_CROSSINGS;',
-    what: 'chatter limit fires one crossing late (count > limit becomes count >= limit)', extra: `${VERIFICATION}/xbSolvers.test.ts` },
+    what: 'chatter limit fires one crossing early (count > limit becomes count >= limit)', extra: `${VERIFICATION}/xbSolvers.test.ts` },
   { id: 17, kind: 'drop clamp', file: `${ENGINE}/zeroCrossingGuard.ts`,
     before: 'tHigh: Math.min(tn + d, tEnd)', after: 'tHigh: tn + d',
     what: 'scheduled-event bracket end is no longer clamped to the interval end', extra: `${VERIFICATION}/xbSolvers.test.ts` },
@@ -143,6 +143,18 @@ export function failingTests(report: unknown): string[] {
   return names;
 }
 
+let activeChild: ChildProcess | null = null;
+/** Kills the active vitest process group (detached child), so an interrupted run leaves no orphan. */
+function killActiveChild(): void {
+  const child = activeChild;
+  if (child === null || child.pid === undefined) return;
+  try {
+    if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL');
+  } catch {
+    try { child.kill('SIGKILL'); } catch { /* already gone */ }
+  }
+}
+
 function runVitest(tests: string[], timeoutMs: number, outFile: string): Promise<VitestRun> {
   const args = [VITEST, 'run', ...tests, '--exclude', '.claude/**', '--reporter=json', `--outputFile=${outFile}`];
   // XBV_SEED_BASE is removed: the mutation run always uses the fixed seeds, so the verdicts are comparable across nights.
@@ -154,6 +166,7 @@ function runVitest(tests: string[], timeoutMs: number, outFile: string): Promise
     const child: ChildProcess = spawn(process.execPath, args, {
       cwd: ROOT, env, detached: process.platform !== 'win32', stdio: ['ignore', 'ignore', 'pipe'],
     });
+    activeChild = child;
     let stderr = '';
     child.stderr?.on('data', (chunk) => { if (stderr.length < 4000) stderr += String(chunk); });
     const kill = () => {
@@ -167,6 +180,7 @@ function runVitest(tests: string[], timeoutMs: number, outFile: string): Promise
     const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
     child.on('close', (code) => {
       clearTimeout(timer);
+      if (activeChild === child) activeChild = null;
       const seconds = Math.round((Date.now() - started) / 100) / 10;
       let failing: string[] | null = null;
       if (!timedOut && existsSync(outFile)) {
@@ -196,7 +210,7 @@ export function classify(run: VitestRun, baseline: ReadonlySet<string>): { statu
 interface Options { check: boolean; limit: number | null; only: number[] | null; timeoutSeconds: number; writeReport: boolean }
 
 export function parseOptions(argv: string[]): Options {
-  const opts: Options = { check: false, limit: null, only: null, timeoutSeconds: 900, writeReport: true };
+  const opts: Options = { check: false, limit: null, only: null, timeoutSeconds: 0, writeReport: true };
   for (const arg of argv) {
     if (arg === '--check') opts.check = true;
     else if (arg === '--no-report') opts.writeReport = false;
@@ -296,12 +310,21 @@ async function main(): Promise<void> {
   if (dirty !== '') throw new Error(`refusing to mutate files with uncommitted changes:\n${dirty}`);
 
   const tests = [VERIFICATION, ...new Set(MUTATIONS.map((m) => m.extra))];
-  const timeoutMs = opts.timeoutSeconds * 1000;
+  // --timeout=<s> fixes the per-mutant timeout; by default it is 3 x the baseline run time (at least 120 s), so a slow
+  // CI runner does not turn ordinary runs into false kills. The baseline itself may take up to 1800 s.
+  let timeoutMs = opts.timeoutSeconds > 0 ? opts.timeoutSeconds * 1000 : 1_800_000;
   const workDir = mkdtempSync(join(tmpdir(), 'xbv-mutation-'));
   const restoreAll = () => {
     for (const [f, buf] of originals) writeFileSync(join(ROOT, f), buf);
   };
-  const onSignal = () => { restoreAll(); process.exit(130); };
+  // On SIGINT / SIGTERM: kill the vitest process group, restore every mutated file and remove the work directory
+  // (process.exit skips the finally block below, so the cleanup is done here too).
+  const onSignal = () => {
+    killActiveChild();
+    restoreAll();
+    rmSync(workDir, { recursive: true, force: true });
+    process.exit(130);
+  };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
 
@@ -312,6 +335,8 @@ async function main(): Promise<void> {
     const base = await runVitest(tests, timeoutMs, join(workDir, 'baseline.json'));
     if (base.timedOut || base.failing === null) throw new Error('baseline run produced no report; no mutant is attributed');
     baseline = base.failing;
+    if (opts.timeoutSeconds === 0) timeoutMs = Math.max(120_000, Math.round(3 * base.seconds * 1000));
+    console.log(`  per-mutant timeout ${Math.round(timeoutMs / 1000)} s`);
     const baselineSet = new Set(baseline);
     console.log(`  -> ${baseline.length} failing at baseline in ${base.seconds} s`);
 
@@ -347,7 +372,7 @@ async function main(): Promise<void> {
     const sha = git(['rev-parse', '--short', 'HEAD']).trim();
     const date = new Date().toISOString().slice(0, 10);
     writeFileSync(REPORT_PATH, renderReport({
-      results, selected, total: MUTATIONS.length, sha, date, timeoutSeconds: opts.timeoutSeconds, baseline,
+      results, selected, total: MUTATIONS.length, sha, date, timeoutSeconds: Math.round(timeoutMs / 1000), baseline,
     }), 'utf8');
     console.log(`report: ${REPORT_PATH}`);
   }

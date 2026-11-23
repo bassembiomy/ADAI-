@@ -19,7 +19,7 @@ const errors = (d: { severity: string }[]) => d.filter((x) => x.severity === 'er
 const at = (r: ReturnType<typeof runModel>, probe: string, i = -1) => r.signals[probe].at(i);
 
 describe('execution order is a property of the graph, not of the file', () => {
-  it('seeds 1..30: shuffling block order and renaming every id gives identical signals (rk4, 20 steps)', () => {
+  it('30 seeds (1..30, or the XBV_SEED_BASE window): shuffling block order and renaming every id gives identical signals (rk4, 20 steps)', () => {
     for (const seed of seedsFromEnv(seedRange(1, 30))) {
       const spec = randomGraph(seed, { blocks: 12 });
       const rng = mulberry32(seed * 7919);
@@ -43,7 +43,7 @@ describe('execution order is a property of the graph, not of the file', () => {
 });
 
 describe('execution order is a valid topological order (plan 5.2)', () => {
-  it('seeds 1..50 (blocks shuffled): in the executed order, every feed-through dependency outside a loop runs after its source', () => {
+  it('50 seeds (1..50, or the XBV_SEED_BASE window; blocks shuffled): in the executed order, every feed-through dependency outside a loop runs after its source', () => {
     for (const seed of seedsFromEnv(seedRange(1, 50))) {
       const spec = randomGraph(seed, { blocks: 14 });
       const rng = mulberry32(seed * 104729);
