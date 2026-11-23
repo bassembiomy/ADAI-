@@ -8,3 +8,4 @@ export * from './diagnosticRecipes';
 export * from './embedded';
 export * from './cParity';
 export * from './smScenario';
+export * from './seeds';

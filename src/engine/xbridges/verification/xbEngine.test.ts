@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../BlockDefinitions';
 import { XbridgesEngine } from '../XbridgesEngine';
 import type { XModel } from '../types';
-import { buildModel, mulberry32, randomGraph, runModel } from '../testkit';
+import { buildModel, mulberry32, randomGraph, runModel, seedRange, seedsFromEnv } from '../testkit';
 
 type Spec = Parameters<typeof buildModel>[0];
 const errors = (d: { severity: string }[]) => d.filter((x) => x.severity === 'error');
@@ -20,7 +20,7 @@ const at = (r: ReturnType<typeof runModel>, probe: string, i = -1) => r.signals[
 
 describe('execution order is a property of the graph, not of the file', () => {
   it('seeds 1..30: shuffling block order and renaming every id gives identical signals (rk4, 20 steps)', () => {
-    for (let seed = 1; seed <= 30; seed++) {
+    for (const seed of seedsFromEnv(seedRange(1, 30))) {
       const spec = randomGraph(seed, { blocks: 12 });
       const rng = mulberry32(seed * 7919);
       const rename = (id: string) => `n${id.split('').reverse().join('')}_${seed}`;
@@ -44,7 +44,7 @@ describe('execution order is a property of the graph, not of the file', () => {
 
 describe('execution order is a valid topological order (plan 5.2)', () => {
   it('seeds 1..50 (blocks shuffled): in the executed order, every feed-through dependency outside a loop runs after its source', () => {
-    for (let seed = 1; seed <= 50; seed++) {
+    for (const seed of seedsFromEnv(seedRange(1, 50))) {
       const spec = randomGraph(seed, { blocks: 14 });
       const rng = mulberry32(seed * 104729);
       const model = buildModel({ ...spec, blocks: [...spec.blocks].sort(() => rng() - 0.5) });
