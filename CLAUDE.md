@@ -20,3 +20,10 @@ A model is built the way a user builds it in ADIA, never by changing ADIA for th
 
 The engine itself is changed only when the user asks for an engine review, and then only to follow SysML v1.6 /
 Cameo semantics, with tests.
+
+## X-Bridges verification work (standing instruction from the user)
+
+- Keep `docs/xbridges-verification/PROGRESS-open-findings.md` current: status table, next steps with their briefs, and a
+  log entry after every step, committed and pushed with the work, so a new session can continue from it.
+- Opus plans, writes the acceptance tests and verifies; Sonnet and Haiku (`xbv-executor` with `model: sonnet` /
+  `model: haiku`) execute and run the tests.
