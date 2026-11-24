@@ -5,7 +5,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 28 done of 29; 0 in progress; 0 to do.
-- Findings: 4 open, 245 closed, merged or superseded (WP-21 fixed them, one commit per finding).
+- Findings: 4 open, 246 closed, merged or superseded (WP-21 fixed them, one commit per finding).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
   - S3 (diagnostic, UI or convention deviation): 2 open
@@ -79,8 +79,8 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
-| XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. |
-| XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. |
+| XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. The help now states the tangent-touch behaviour as current, provisional behaviour, and the xbMutationGaps mutant-15 test pins the current behaviour and must be revisited when this is decided. |
+| XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. The help now states the tangent-touch behaviour as current, provisional behaviour, and the xbMutationGaps mutant-15 test pins the current behaviour and must be revisited when this is decided. |
 
 ### S4 - documentation (1)
 
@@ -335,6 +335,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 - XBV-433 (closed): VectorPow float32 emits powf((double)a, (double)b) (xbCGenerator.ts emitVectorElementwisePower ~1190): the strict compile fails with -Werror=float-conversion; exact for float32 inputs but would narrow
 - XBV-435 (closed): Coverage gap: no KALMAN_FILTER scenario with vector / matrix dimensions (matching B and C) exists in code parity; the factory defaults size B and C for scalar u and y, so the vector scenarios are refu
 - XBV-437 (fixed): Full mutation run (2026-11-23, 22 mutants, docs/xbridges-verification/mutation-report.md): killed 9, timeout 1, survived 12, kill rate 45.5 %. Real test gaps: #10 first step no longer capped by maxSte
+- XBV-438 (fixed): XBV-417 follow-up (review 2026-11-24). (1) Loop Tol / Loop Iter. (algTol / maxIter) were not saved: toSimulationSettings / fromSimulationSettings dropped them, so a reload reset them to 1e-6 / 100. (2
 
 ## Decisions
 
