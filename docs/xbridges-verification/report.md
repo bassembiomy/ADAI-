@@ -5,7 +5,7 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 26 done of 29; 1 in progress; 1 to do.
-- Findings: 4 open, 245 closed, merged or superseded. No fix has been made yet (fixes are WP-21).
+- Findings: 4 open, 245 closed, merged or superseded (WP-21 fixed them, one commit per finding).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
   - S3 (diagnostic, UI or convention deviation): 2 open
