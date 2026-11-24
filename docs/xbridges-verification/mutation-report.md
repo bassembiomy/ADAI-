@@ -36,3 +36,24 @@ Each mutant is one string replacement (the `before` text occurs exactly once in 
 Killed 9, survived 12, timeout 1, error 0 (of 22 run).
 
 Kill rate: 45.5% = (killed + timeout) / (killed + timeout + survived). Errors (no verdict) are excluded.
+
+## Rerun of the four real gaps, 2026-11-24 (after XBV-437)
+
+After the gap tests were added (commit `4e9ee84`), the four surviving mutants that were real test gaps were rerun alone:
+`npx tsx scripts/xbridges-verification/mutationRun.ts --only=8,10,12,15`. The unmutated baseline of the same subset had no
+failing test (505.2 s; per-mutant timeout 1516 s).
+
+| # | Mutation | Result | Killing test |
+| --- | --- | --- | --- |
+| 8 | event bracket end no longer clamped to the interval end | killed (431.9 s) | `xbMutationGaps.test.ts` > mutant 8: an event at the end of an output step lands exactly on the output time |
+| 10 | first step no longer capped by maxStep | killed (444.7 s) | `xbMutationGaps.test.ts` > mutant 10: the first step is capped by maxStep even when h0 > maxStep (ode23 batch) |
+| 12 | discrete step shortened to the wrong remaining time | killed (454.7 s) | `xbMutationGaps.test.ts` > mutant 12: the batch discrete last step is shortened to the stop time |
+| 15 | a touch counted as a crossing | killed (440 s) | `xbMutationGaps.test.ts` > mutant 15: a touch is not a crossing (crossingBlock is strict) |
+
+**Killed 4, survived 0, timeout 0, error 0; kill rate 100 %** for the four real gaps. The other eight survivors are
+near-equivalent mutants (the output or the accepted solution is unchanged by them; see the notes in the table above),
+so a full rerun would move the headline from 45.5 % to 63.6 % (14 of 22) at most, and this run shows the 4 that
+mattered are closed.
+
+A full rerun does not fit a working session on this machine: the baseline alone takes 505-660 s, which sets a
+1500-2000 s timeout per mutant, so 22 mutants need 10-12 h. `--only=8,10,12,15` takes about 40 minutes.
