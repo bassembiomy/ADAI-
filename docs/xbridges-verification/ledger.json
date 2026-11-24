@@ -2991,6 +2991,14 @@
    "status": "fixed",
    "summary": "XBV-417 follow-up (review 2026-11-24). (1) Loop Tol / Loop Iter. (algTol / maxIter) were not saved: toSimulationSettings / fromSimulationSettings dropped them, so a reload reset them to 1e-6 / 100. (2) The engine accepted invalid values: algTol 0 ran silently, algTol -1 / NaN and maxIter 0 gave a misleading ALGEBRAIC_LOOP_NOT_CONVERGED, maxIter 2.5 silently acted as 3.",
    "fix": "simulationConfig.ts saves and restores algTol and maxIter; XbridgesEngine.compile refuses an invalid algTol / maxIter with exactly one STIFF_SOLVER_INVALID_OPTION and the loop solver is not run with it. Help corrected: under ODE14x and ODE23tb the loop is first solved to 1e-10 (StiffSolver.computeOutputsTight) and Loop Tol is only the fallback. Acceptance: src/engine/xbridges/verification/xbLoopOptions.test.ts (commit 32c9d606). Fix commit: 3dff1cba (acceptance 32c9d606)."
+  },
+  {
+   "id": "XBV-439",
+   "plan_ref": "5.2 engine",
+   "severity": "S3",
+   "gate": "V4",
+   "status": "open",
+   "summary": "Found by the WP-B3 verifier (2026-11-24), present before WP-B3: y = y + 1e-12 (y^2 + 1) has no real root, yet the Gauss-Seidel pre-pass of solveAlgebraicLoopCore accepts y = 3e-12 as converged (both the engine before and after WP-B3, algTol 1e-6 and 1e-3); the pass stops on a small change, not on the XBV-421 solution test. With the pre-pass off the WP-B3 engine reports ALGEBRAIC_LOOP_NOT_CONVERGED. Fix: the pre-pass may only accept a point that passes the same solution test as Newton. Probe: scratchpad probe.mts of the WP-B3 verification; acceptance to be written."
   }
  ],
  "blocks": {

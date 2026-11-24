@@ -8,7 +8,7 @@ updates are committed and pushed together with the work they describe. Detailed 
 
 - **Branch:** `arena/87db4611-adai`. Push only there. `automative` was merged at `55ed35a5` and must stay green, so
   merge into it only when every test passes (see "Merge rule").
-- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 committed as `6b5f2875`, pending verification).
+- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 verifier FAIL; regression acceptance committed, fix dispatched).
 
 ## How to run the work (roles — the user's standing instruction)
 
@@ -37,8 +37,8 @@ The full `test:xbridges` takes about 8–20 minutes. The two host-compile suites
 ## Merge rule
 
 The branch holds acceptance tests that fail **on purpose** until the fix lands. Today: 8 in
-`src/utils/stateMachine/xbFloat32Ops.test.ts` (XBV-434) and 5 in `src/engine/xbridges/verification/xbEngineB.test.ts`
-describe `e` (XBV-436). Do not merge the branch into `automative` until these pass.
+`src/utils/stateMachine/xbFloat32Ops.test.ts` (XBV-434) and 4 in `src/engine/xbridges/verification/xbLoopDomain.test.ts`
+(WP-B3 regression). The 5 XBV-436 targets in `xbEngineB` describe `e` pass since `6b5f2875`. Do not merge the branch into `automative` until these pass.
 
 ---
 
@@ -55,7 +55,8 @@ describe `e` (XBV-436). Do not merge the branch into `automative` until these pa
 | | WP-A5 close-out | to do | — |
 | XBV-436 far loop roots | WP-B1 acceptance | done (5 failing by design) | `6852e9a0`; resolution floor for root 3.16e8 in `ec9130e9` |
 | | WP-B2 lab | **done: NLEQ-ERR green 12/12 from zero, worst 613 evaluations** | `ec9130e9`, D24 revised; the first verdict ("cannot work") was a lab defect |
-| | WP-B3 port NLEQ-ERR into the engine | **in progress (next)** | — |
+| | WP-B3 port NLEQ-ERR into the engine | **verifier FAIL, rework in progress** | `6b5f2875` (5 targets green, no false roots), regression on loops undefined on one side: acceptance `xbLoopDomain.test.ts` |
+| XBV-439 Gauss-Seidel pre-pass false root | new, found by the WP-B3 verifier, older than WP-B3 | open, to plan | ledger XBV-439 |
 | | WP-B4 close-out | to do | — |
 | | Simulink check of the zero start | script ready, waiting for MATLAB | `06becad6`, `901670c3`: `far_root_loop.m`, `xbGoldenLoop.test.ts` |
 | XBV-419 / 420 tangent touch | WP-C1 script, WP-C3 harness | done | `c96efcfa`: `tangent_touch.m`, `xbGoldenTangent.test.ts` (24 named skips) |
@@ -128,6 +129,19 @@ then merge into `automative`.
 ---
 
 ## Log (newest first)
+
+- **2026-11-24 WP-B3 verifier: FAIL, rework.**
+  - **Passed:** the acceptance A and B re-runs, the scope check, the timing (+3 to +5 %), and the false-root probes:
+    there are no false roots in the new engine.
+  - **Regression (deviation 5):** y = sqrt(y) + c from a zero start (c = −0.001, −0.0031, −0.1, −0.2) is now
+    `ALGEBRAIC_LOOP_NOT_CONVERGED`. F(−h) is NaN, so the Jacobian is null and the solve stops; the old engine solved
+    all four.
+  - **Acceptance:** `xbLoopDomain.test.ts`, hand oracle y = w² with w² − w − c = 0. It passes 6 of 6 on the engine
+    before WP-B3 (checked by swapping the file in) and fails 4 of 6 on `6b5f2875`.
+  - **Fix dispatched to Sonnet:** restore a one-sided difference where the central one is non-finite.
+  - **New finding:** XBV-439 (S3, open, present before WP-B3). The Gauss-Seidel pre-pass accepts y = 3e-12 for
+    y = y + 1e-12 (y² + 1), which has no root.
+  - **Division loops:** y = a/y + b fails in both engines (F is infinite at 0). Not a regression; not filed.
 
 - **2026-11-24 WP-B3 implemented, not yet committed.**
   - **Executor's results:**

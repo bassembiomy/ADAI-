@@ -5,10 +5,10 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 ## Summary
 
 - Work packages: 28 done of 29; 0 in progress; 0 to do.
-- Findings: 4 open, 246 closed, merged or superseded (WP-21 fixed them, one commit per finding).
+- Findings: 5 open, 246 closed, merged or superseded (WP-21 fixed them, one commit per finding).
   - S1 (wrong number in simulation or generated C): 0 open
   - S2 (crash, stop, freeze or silent no-op): 1 open
-  - S3 (diagnostic, UI or convention deviation): 2 open
+  - S3 (diagnostic, UI or convention deviation): 3 open
   - S4 (documentation): 1 open
 - Decisions recorded: 24; open: 2 (D20, D21).
 
@@ -75,12 +75,13 @@ Generated from `docs/xbridges-verification/ledger.json` by `scripts/xbridges-ver
 | --- | --- | --- | --- |
 | XBV-434 | V7 | 7.1 code parity | Float32 signals are computed in double and rounded once per signal / state write, in both the interpreter and the generated C (e.g. const double v = (double)a + (double)b + (double)c; out = (float)v). Simulink 'single' and Embedded Coder compute in float and round every operation: Sum +++ of 16777216, 1, 1 gives 16777218 here and 16777216 in Simulink; also multi-operation blocks (Product, matrix products, filters, PID, integrator x + dt u) and libm (sinf vs (float)sin). On a single-precision FPU (Cortex-M4F) the double arithmetic is emulated in software. Needs a decision: follow Simulink (engine + generator change) or document as a deliberate profile. Found by the WP-17b verifier. Note: VectorPow float32 C already computes in float (powf) while the interpreter computes pow in double and rounds (<= 1 ULP apart); whichever way this is decided, VectorPow must be aligned. |
 
-### S3 - diagnostic, UI or convention deviation (2)
+### S3 - diagnostic, UI or convention deviation (3)
 
 | Id | Gate | Plan ref | Summary |
 | --- | --- | --- | --- |
 | XBV-419 | V5 | 4.5 solvers | RELAY (switchOn 0.25, switchOff 0) on u = (t-1)^2, which touches switchOff at t = 1 without crossing it: batch ode23 / ode45 / ode23tb never switch the relay off (integral off by 0.5 against an oracle that switches at u <= switchOff), while live switches off because t = 1 is a grid point. Simulink zero-crossing detection also locates only sign changes, so the batch result may be the Simulink one: decide against a Simulink golden (WP-15); live and batch must agree either way. Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. The help now states the tangent-touch behaviour as current, provisional behaviour, and the xbMutationGaps mutant-15 test pins the current behaviour and must be revisited when this is decided. |
 | XBV-420 | V5 | 4.5 solvers | DEADZONE [-1, 0] of u = (t-1)^2 (tangent touch of the upper limit at t = 1) under batch ode23tb at default tolerances errs by 2.55e-4 (ode23 / ode45 exact); confirm the oracle with a Simulink golden (WP-15). Found by the E10 verifier, same before and after E10. WP-15 deferred (no MATLAB): open pending a Simulink golden. The help now states the tangent-touch behaviour as current, provisional behaviour, and the xbMutationGaps mutant-15 test pins the current behaviour and must be revisited when this is decided. |
+| XBV-439 | V4 | 5.2 engine | Found by the WP-B3 verifier (2026-11-24), present before WP-B3: y = y + 1e-12 (y^2 + 1) has no real root, yet the Gauss-Seidel pre-pass of solveAlgebraicLoopCore accepts y = 3e-12 as converged (both the engine before and after WP-B3, algTol 1e-6 and 1e-3); the pass stops on a small change, not on the XBV-421 solution test. With the pre-pass off the WP-B3 engine reports ALGEBRAIC_LOOP_NOT_CONVERGED. Fix: the pre-pass may only accept a point that passes the same solution test as Newton. Probe: scratchpad probe.mts of the WP-B3 verification; acceptance to be written. |
 
 ### S4 - documentation (1)
 
