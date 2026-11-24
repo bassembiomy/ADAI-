@@ -8,7 +8,7 @@ updates are committed and pushed together with the work they describe. Detailed 
 
 - **Branch:** `arena/87db4611-adai`. Push only there. `automative` was merged at `55ed35a5` and must stay green, so
   merge into it only when every test passes (see "Merge rule").
-- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 implemented, uncommitted, under verification).
+- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 committed as `6b5f2875`, pending verification).
 
 ## How to run the work (roles — the user's standing instruction)
 
@@ -146,8 +146,10 @@ then merge into `automative`.
     5. the old one-sided finite-difference fallback for a non-finite F was dropped.
   - **Now:** the `xbv-verifier` (Opus) is checking for false roots, for loops whose F is non-finite on one side, and
     for timing.
-  - **If the session ended here:** the engine change exists only in the working tree. Re-run the verifier brief
-    (acceptance A–E plus the five deviations) before committing it.
+  - **Committed as `6b5f2875`, marked PENDING VERIFICATION**, so the work survives a session end. If the session ended
+    before the verifier's verdict, re-run the verifier brief (acceptance A–E plus the five deviations) against
+    `git diff 6b5f2875~1 6b5f2875`. On FAIL, fix it in a new commit or revert `6b5f2875`. Do not merge into
+    `automative` until it passes.
 
 - **2026-11-24 WP-B3 started.**
   - **Dispatched:** to Sonnet (`xbv-executor`), editing only `XbridgesEngine.ts` `solveAlgebraicLoopCore`.
