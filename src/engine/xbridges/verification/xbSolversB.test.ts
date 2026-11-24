@@ -25,7 +25,8 @@ import { XbridgesEngine } from '../XbridgesEngine';
 import { Solvers } from '../Solvers';
 import { liveStep, liveStepAt } from '../liveStep';
 import {
-  invalidSolverOptionTexts, solverOptionDiagnostics, solverOptionsForRun, type SolverOptionTexts,
+  DEFAULT_SIMULATION_CONFIG, invalidSolverOptionTexts, solverOptionDiagnostics, solverOptionsForRun, solverOptionsForSave,
+  solverOptionTextsFrom, type SolverOptionTexts,
 } from '../simulationConfig';
 import { buildModel, runModel, type ModelSpec } from '../testkit';
 
@@ -254,16 +255,33 @@ describe('D3: AbsTol governs where x is near 0 (x\' = -x from x0 = 1e-8)', () =>
 });
 
 describe('D3: the user RelTol / AbsTol / maxStep / minStep reach the solver (canvas -> engine.options)', () => {
-  const texts = (o: Partial<SolverOptionTexts>): SolverOptionTexts => ({ relative: '1e-3', absolute: '1e-6', extrapolationOrder: '4', newtonIterations: '1', maxStep: '', minStep: '', ...o });
+  const texts = (o: Partial<SolverOptionTexts>): SolverOptionTexts => ({ relative: '1e-3', absolute: '1e-6', extrapolationOrder: '4', newtonIterations: '1', maxStep: '', minStep: '', algTol: '1e-6', maxIter: '100', ...o });
   it('solverOptionsForRun maps the toolbar texts to engine option names for ode23, ode45 and ode23tb; empty step limits stay unset', () => {
     for (const s of VARIABLE) {
-      expect(solverOptionsForRun(s, texts({ relative: '1e-9', absolute: '1e-12', maxStep: '0.01', minStep: '1e-8' }))).toEqual({ relTol: 1e-9, absTol: 1e-12, maxStep: 0.01, minStep: 1e-8 });
-      expect(solverOptionsForRun(s, texts({}))).toEqual({ relTol: 1e-3, absTol: 1e-6 });
+      expect(solverOptionsForRun(s, texts({ relative: '1e-9', absolute: '1e-12', maxStep: '0.01', minStep: '1e-8' })))
+        .toEqual({ relTol: 1e-9, absTol: 1e-12, maxStep: 0.01, minStep: 1e-8, algTol: 1e-6, maxIter: 100 });
+      expect(solverOptionsForRun(s, texts({}))).toEqual({ relTol: 1e-3, absTol: 1e-6, algTol: 1e-6, maxIter: 100 });
     }
   });
-  it('fixed-step solvers receive no tolerance options; ode14x receives only its own options', () => {
-    for (const s of ['euler', 'rk4', 'ode2', 'ode3', 'ode5', 'discrete']) expect(solverOptionsForRun(s, texts({ relative: '1e-9' }))).toEqual({});
-    expect(solverOptionsForRun('ode14x', texts({ relative: '1e-9', extrapolationOrder: '3', newtonIterations: '2' }))).toEqual({ extrapolationOrder: 3, newtonIterations: 2 });
+  // XBV-417: the algebraic loop solver runs under every solver, so its two options are passed whatever the solver is.
+  it('the algebraic loop options reach the engine under every solver (XBV-417); the other options stay solver-specific', () => {
+    for (const s of ['euler', 'rk4', 'ode2', 'ode3', 'ode5', 'discrete']) {
+      expect(solverOptionsForRun(s, texts({ relative: '1e-9' })), s).toEqual({ algTol: 1e-6, maxIter: 100 });
+      expect(solverOptionsForRun(s, texts({ algTol: '1e-9', maxIter: '250' })), s).toEqual({ algTol: 1e-9, maxIter: 250 });
+    }
+    expect(solverOptionsForRun('ode14x', texts({ relative: '1e-9', extrapolationOrder: '3', newtonIterations: '2' })))
+      .toEqual({ extrapolationOrder: 3, newtonIterations: 2, algTol: 1e-6, maxIter: 100 });
+    // The fields are saved with every solver, so a saved model keeps them when the solver changes.
+    expect(solverOptionsForSave(texts({ algTol: '1e-8', maxIter: '50' }))).toMatchObject({ algTol: 1e-8, maxIter: 50 });
+    expect(solverOptionTextsFrom({ ...DEFAULT_SIMULATION_CONFIG, algTol: 1e-4, maxIter: 7 })).toMatchObject({ algTol: '0.0001', maxIter: '7' });
+  });
+  it('an invalid loop tolerance or iteration count is refused with STIFF_SOLVER_INVALID_OPTION under every solver', () => {
+    for (const s of [...VARIABLE, 'euler', 'rk4', 'ode14x']) {
+      for (const bad of ['0', '-1', 'abc', 'inf']) expect(invalidSolverOptionTexts(s, texts({ algTol: bad })), `${s} algTol ${bad}`).toContain('algTol');
+      for (const bad of ['0', '-1', '2.5', 'abc', 'inf']) expect(invalidSolverOptionTexts(s, texts({ maxIter: bad })), `${s} maxIter ${bad}`).toContain('maxIter');
+      expect(solverOptionDiagnostics(s, texts({ algTol: '0' })).map((d) => [d.severity, d.code])).toEqual([['error', 'STIFF_SOLVER_INVALID_OPTION']]);
+    }
+    for (const ok of ['1', '2', '1000']) expect(invalidSolverOptionTexts('euler', texts({ maxIter: ok })), ok).toEqual([]);
   });
   it('the workspace spreads solverOptionsForRun into the engine options, and the worker takes the same options object', () => {
     const root = join(__dirname, '../../../..');
@@ -471,7 +489,7 @@ describe('minStep: STIFF_SOLVER_STEP_TOO_SMALL when the tolerance cannot be met 
 });
 
 describe('invalid maxStep / minStep', () => {
-  const T = (o: Partial<SolverOptionTexts>): SolverOptionTexts => ({ relative: '1e-3', absolute: '1e-6', extrapolationOrder: '4', newtonIterations: '1', maxStep: '', minStep: '', ...o });
+  const T = (o: Partial<SolverOptionTexts>): SolverOptionTexts => ({ relative: '1e-3', absolute: '1e-6', extrapolationOrder: '4', newtonIterations: '1', maxStep: '', minStep: '', algTol: '1e-6', maxIter: '100', ...o });
   it('canvas: 0, negative, text and min > max are refused with STIFF_SOLVER_INVALID_OPTION before the run; empty and "auto" mean unset', () => {
     for (const s of VARIABLE) {
       for (const bad of ['0', '-1', '-0.01', 'abc', 'NaN', 'inf']) {
@@ -483,8 +501,8 @@ describe('invalid maxStep / minStep', () => {
       expect(invalidSolverOptionTexts(s, T({ maxStep: '0.1', minStep: '0.1' }))).toEqual([]);
       expect(invalidSolverOptionTexts(s, T({ maxStep: '', minStep: 'auto' }))).toEqual([]);
       // an invalid value is never passed on, never clamped
-      expect(solverOptionsForRun(s, T({ maxStep: '0.01', minStep: '0.1' }))).toEqual({ relTol: 1e-3, absTol: 1e-6, maxStep: 0.01 });
-      expect(solverOptionsForRun(s, T({ maxStep: '-1' }))).toEqual({ relTol: 1e-3, absTol: 1e-6 });
+      expect(solverOptionsForRun(s, T({ maxStep: '0.01', minStep: '0.1' }))).toEqual({ relTol: 1e-3, absTol: 1e-6, maxStep: 0.01, algTol: 1e-6, maxIter: 100 });
+      expect(solverOptionsForRun(s, T({ maxStep: '-1' }))).toEqual({ relTol: 1e-3, absTol: 1e-6, algTol: 1e-6, maxIter: 100 });
     }
   });
   // Engine level (options passed to the solver directly, as the API / worker user can), XBV-426: every invalid combination gives exactly

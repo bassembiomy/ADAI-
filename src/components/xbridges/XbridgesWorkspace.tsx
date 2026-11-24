@@ -1464,7 +1464,7 @@ export const XbridgesWorkspace: React.FC<{
   const startTimeInvalid = startTimeParsed === null || !Number.isFinite(startTimeParsed);
   const stopTimeInvalid = stopTimeParsed === null || (!startTimeInvalid && stopTimeParsed < (startTimeParsed as number));
   const fixedStepInvalid = fixedStepParsed === null || (fixedStepParsed !== 'auto' && !(Number.isFinite(fixedStepParsed) && fixedStepParsed > 0));
-  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}|${solverOptionTexts.relative}|${solverOptionTexts.absolute}|${solverOptionTexts.extrapolationOrder}|${solverOptionTexts.newtonIterations}|${solverOptionTexts.maxStep}|${solverOptionTexts.minStep}`;
+  const simulationKey = `${solverType}|${startTimeInput}|${stopTimeInput}|${stepSizeInput}|${solverOptionTexts.relative}|${solverOptionTexts.absolute}|${solverOptionTexts.extrapolationOrder}|${solverOptionTexts.newtonIterations}|${solverOptionTexts.maxStep}|${solverOptionTexts.minStep}|${solverOptionTexts.algTol}|${solverOptionTexts.maxIter}`;
   const simLimitRef = React.useRef<number | null>(null);
   const liveStepRef = React.useRef<number | null>(null);
   // Canvas time base (plan 5.1): output step n starts at start + n * step (a product, not an accumulated sum).
@@ -3760,6 +3760,38 @@ export const XbridgesWorkspace: React.FC<{
               </div>
                 </>
               )}
+
+              {/* Algebraic loop solver (XBV-417): applies to every solver, as in the Simulink configuration parameters. */}
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Loop Tol</span>
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21"
+                  type="text"
+                  value={solverOptionTexts.algTol}
+                  onChange={e => setSolverOptionText('algTol', e.target.value)}
+                  disabled={activeSimulating}
+                  title={invalidOptionKeys.includes('algTol') ? 'Algebraic loop tolerance must be a number greater than 0' : 'Solution tolerance of the algebraic loop solver (default 1e-6)'}
+                  aria-invalid={invalidOptionKeys.includes('algTol')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('algTol') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+                {invalidOptionKeys.includes('algTol') && (
+                  <span role="alert" className="text-[8px] text-red-400 mt-0.5">Must be greater than 0</span>
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Loop Iter.</span>
+                <input data-help-feature="live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4"
+                  type="text"
+                  value={solverOptionTexts.maxIter}
+                  onChange={e => setSolverOptionText('maxIter', e.target.value)}
+                  disabled={activeSimulating}
+                  title={invalidOptionKeys.includes('maxIter') ? 'Algebraic loop iterations must be an integer of 1 or more' : 'Newton iteration limit of the algebraic loop solver (integer, default 100)'}
+                  aria-invalid={invalidOptionKeys.includes('maxIter')}
+                  className={`w-20 bg-[#0a0a0a] border rounded-xl px-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none transition-all hover:bg-[#222] disabled:opacity-50 ${invalidOptionKeys.includes('maxIter') ? 'border-red-500 focus:border-red-500' : 'border-[#333] focus:border-emerald-500'}`}
+                />
+                {invalidOptionKeys.includes('maxIter') && (
+                  <span role="alert" className="text-[8px] text-red-400 mt-0.5">Must be an integer of 1 or more</span>
+                )}
+              </div>
 
               <div className="flex flex-col">
                 <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Fixed Step</span>

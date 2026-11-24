@@ -1,7 +1,7 @@
 {
   "scope": "Registered semantic features; UI source candidates reported separately.",
-  "total": 2209,
-  "documented": 2209,
+  "total": 2211,
+  "documented": 2211,
   "missing": 0,
   "coverage": 100,
   "duplicateFeatureIds": [],
@@ -14545,6 +14545,24 @@
       "id": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
       "label": "Newton Iter. (ode14x)",
       "topicId": "live:components/xbridges/XbridgesWorkspace:e5d9363ae480",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21",
+      "label": "Loop Tol (algebraic loop tolerance)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21",
+      "sectionId": "use",
+      "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "kind": "action",
+      "module": "system"
+    },
+    {
+      "id": "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4",
+      "label": "Loop Iter. (algebraic loop iterations)",
+      "topicId": "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4",
       "sectionId": "use",
       "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
       "kind": "action",

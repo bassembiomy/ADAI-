@@ -238,14 +238,14 @@ const elementaryExamples: Record<string, string> = {
   ROBOT_VACUUM_ENVIRONMENT: 'Drive pose around the fixed room map. Inspect the collision flag and LiDAR ranges as the robot approaches an obstacle; compare the displayed map with the detected geometry.',
   ROBOT_VACUUM_ODOMETRY: 'Increase both encoder counts equally. Compare forward displacement with one wheel circumference per encoder_cpr and inspect near-zero heading change.',
   ROBOT_VACUUM_FUSION: 'Connect odometry increments, gyro/reference signals and true pose from the same twin. Compare corrected pose against raw dead reckoning when odometry drifts.',
-  ROBOT_VACUUM_SLAM: 'Supply scan ranges and changing pose. Inspect occupancy updates and pose corrections when the robot revisits previously observed geometry.',
+  ROBOT_VACUUM_SLAM: 'Supply scan ranges and changing pose. Inspect occupancy updates and pose corrections when the robot revisits previously observed geometry. Occupancy grid (D18): the grid is updated once per major step (Simulink discrete-update semantics), not at every solver stage, so the fixed-step and adaptive solvers produce the same map.',
   ROBOT_VACUUM_NAV: 'Run with a valid room grid and pose estimate. Reduce battery during cleaning and inspect the mission transition into return/docking behavior along with coverage statistics.',
   ROBOT_VACUUM_KINEMATICS: 'Set linear speed target 0 and a nonzero angular target. The inverse differential-drive relation gives opposing left/right wheel references for rotation in place.',
   ROBOT_VACUUM_WHEEL_CONTROL: 'Provide equal positive wheel-speed references with zero measured speeds. Inspect positive PI voltage commands and their clipping to the configured battery-voltage limits.',
   ROBOT_VACUUM_ENCODER: 'Supply wheel speeds and inspect quantized incremental encoder counts. Compare the default noisy result with noise_std reduced to zero.',
   ROBOT_VACUUM_LIDAR: 'Connect pose [x,y,theta] from the twin. Inspect the eight range beams and their angles as a wall comes within lidar_max_range.',
   ROBOT_VACUUM_LOCALIZATION: 'Connect true/reference and dead-reckoning pose from the same simulation. Inspect estimated pose and covariance while varying filter gain and odometry error.',
-  ROBOT_VACUUM_MAPPING: 'Supply range scans and pose estimates. Compare occupancy, obstacle and free-space grid outputs before and after the same wall is scanned repeatedly.',
+  ROBOT_VACUUM_MAPPING: 'Supply range scans and pose estimates. Compare occupancy, obstacle and free-space grid outputs before and after the same wall is scanned repeatedly. Occupancy grid (D18): the grid is updated once per major step (Simulink discrete-update semantics), not at every solver stage, so the fixed-step and adaptive solvers produce the same map.',
   ROBOT_VACUUM_COVERAGE: 'Supply the room grid and estimated pose. Follow the generated sweep waypoints and inspect coverage progression as the robot visits successive cells.',
   ROBOT_VACUUM_GLOBAL_PLANNER: 'Supply a grid containing an obstacle between start and goal. Inspect the collision-free route and the next waypoint selected for the local controller.',
   ROBOT_VACUUM_OBSTACLE_AVOIDANCE: 'Supply a forward waypoint and then introduce short front-range returns. Inspect reductions in commanded forward speed and changes in local steering.',
@@ -418,3 +418,24 @@ BLOCK_GUIDANCE['xbridges:BUS_SELECTOR'] = {
 };
 
 Object.assign(BLOCK_GUIDANCE, POWERTRAIN_GUIDANCE);
+
+/**
+ * Documented differences from Simulink, one paragraph each (verification decisions D9, D12, D15-D19). They are attached to
+ * the blocks they change, so the block reference tells the whole story; the ledger entries hold the reasoning. A difference
+ * that is a defect is never recorded here: it goes to the verification ledger as a finding.
+ */
+const SIMULINK_DIFFERENCES: Record<string, string> = {
+  INTEGRATOR_CONTINUOUS: 'Embedded path (D9): every block in tick k sees the start-of-tick time t_k, and a continuous state publishes its value at t_k and is updated to t_(k+1) after all outputs, which is the Simulink output-then-update order.',
+  RATE_LIMITER: 'Initial condition (D12): ADIA adds an explicit initialCondition (default 0) that Simulink lacks; it is the output before the first sample. With a discrete sample time the first output is the input clamped from that initial value by one sample of each slew rate; with an inherited (continuous) sample time the first output is the initial condition itself, because no time has elapsed yet.',
+  RELAY: 'Zero crossings (D15): the fixed-step solvers (Euler, Heun, fixed Bogacki-Shampine, RK4, ODE5, ode14x) do not locate zero crossings, as Simulink with zero-crossing detection off for fixed-step simulation (its default); the relay mode then changes at a major step, the output grid stays k times the step, and a batch run equals the canvas step. Adaptive ODE23, ODE45 and TR-BDF2 keep event location. Current behaviour, provisional until the Simulink comparison (XBV-419): a crossing function that only touches zero and returns is not treated as an event, and batch and canvas both hold the mode.',
+  DEADZONE: 'Zero crossings (D15): a dead zone that a signal only touches tangentially (the input equals a limit and returns) is currently not located as an event by the adaptive solvers and the input passes through the touch region unchanged. This is the current ADIA behaviour and is provisional, pending the Simulink comparison (XBV-420).',
+  MatrixDiag: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal). Simulink has separate blocks for the two directions and no diagMode option, and neither does ADIA now.',
+  Diag: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal).',
+  DiagExtract: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal).',
+  ExtractDiag: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal).',
+};
+for (const [typeId, text] of Object.entries(SIMULINK_DIFFERENCES)) {
+  const entry = BLOCK_GUIDANCE[`xbridges:${typeId}`];
+  if (!entry) throw new Error(`SIMULINK_DIFFERENCES has no BLOCK_GUIDANCE entry for ${typeId}`);
+  entry.behavior = entry.behavior ? `${entry.behavior} ${text}` : text;
+}

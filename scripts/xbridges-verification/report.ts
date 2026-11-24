@@ -38,7 +38,7 @@ out.push('## Summary');
 out.push('');
 const done = L.wps.filter((w) => w.status === 'done').length;
 out.push(`- Work packages: ${done} done of ${L.wps.length}; ${L.wps.filter((w) => w.status === 'in_progress').length} in progress; ${L.wps.filter((w) => w.status === 'todo').length} to do.`);
-out.push(`- Findings: ${open.length} open, ${closedOrMerged.length} closed, merged or superseded. No fix has been made yet (fixes are WP-21).`);
+out.push(`- Findings: ${open.length} open, ${closedOrMerged.length} closed, merged or superseded (WP-21 fixed them, one commit per finding).`);
 for (const s of SEV) out.push(`  - ${s} (${SEV_TEXT[s]}): ${open.filter((f) => f.severity === s).length} open`);
 const openDecisions = L.decisions.filter((d) => /^OPEN/i.test(d.decision));
 out.push(`- Decisions recorded: ${L.decisions.length}; open: ${openDecisions.length}${openDecisions.length ? ` (${openDecisions.map((d) => d.id).join(', ')})` : ''}.`);

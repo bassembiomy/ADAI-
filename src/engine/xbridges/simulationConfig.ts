@@ -20,10 +20,22 @@ export interface XSimulationConfig {
   /** ode14x extrapolation order (Simulink default 4) and Newton iterations (default 1). */
   extrapolationOrder?: number;
   newtonIterations?: number;
+  /**
+   * Algebraic loop solver (Simulink configuration parameters "Algebraic loop solver": solution tolerance and Newton
+   * iteration limit; defaults 1e-6 and 100). The engine solves the loop by Newton with a finite-difference Jacobian
+   * (XbridgesEngine.solveAlgebraicLoopCore), so the tolerance is on the solution and maxIter is the Newton budget.
+   * XBV-417.
+   */
+  algTol?: number;
+  maxIter?: number;
 }
 
 /** Simulink Solver-pane defaults of the solver options (the live stepper applies the same values when unset). */
-export const DEFAULT_SOLVER_OPTIONS = { relTol: 1e-3, absTol: 1e-6, extrapolationOrder: 4, newtonIterations: 1 } as const;
+export const DEFAULT_SOLVER_OPTIONS = {
+  relTol: 1e-3, absTol: 1e-6, extrapolationOrder: 4, newtonIterations: 1,
+  // Simulink "Algebraic loop solver" defaults (the engine defaults in solveAlgebraicLoopCore are the same).
+  algTol: 1e-6, maxIter: 100,
+} as const;
 
 /** Parses a tolerance field: a finite number greater than 0, else null. */
 export function parseToleranceInput(text: string): number | null {
@@ -40,7 +52,12 @@ export function parseIterationInput(text: string): number | null {
 }
 
 /** The toolbar texts of the solver options (the canvas keeps them as text so that invalid input stays visible). */
-export interface SolverOptionTexts { relative: string; absolute: string; extrapolationOrder: string; newtonIterations: string; maxStep: string; minStep: string }
+export interface SolverOptionTexts {
+  relative: string; absolute: string; extrapolationOrder: string; newtonIterations: string;
+  maxStep: string; minStep: string;
+  /** Algebraic loop solver: the solution tolerance and the Newton iteration limit (Simulink configuration parameters). */
+  algTol: string; maxIter: string;
+}
 export type SolverOptionTextKey = keyof SolverOptionTexts;
 
 export function solverOptionTextsFrom(config: XSimulationConfig | null): SolverOptionTexts {
@@ -51,6 +68,8 @@ export function solverOptionTextsFrom(config: XSimulationConfig | null): SolverO
     newtonIterations: String(config?.newtonIterations ?? DEFAULT_SOLVER_OPTIONS.newtonIterations),
     maxStep: config?.maxStep !== undefined ? String(config.maxStep) : '',
     minStep: config?.minStep !== undefined ? String(config.minStep) : '',
+    algTol: String(config?.algTol ?? DEFAULT_SOLVER_OPTIONS.algTol),
+    maxIter: String(config?.maxIter ?? DEFAULT_SOLVER_OPTIONS.maxIter),
   };
 }
 
@@ -68,10 +87,18 @@ export function solverOptionGroup(solver: string): 'tolerances' | 'extrapolation
   return null;
 }
 
+/**
+ * The algebraic loop solver applies to every solver (a loop is solved at each major step, fixed or variable step),
+ * so its two fields are shown next to any solver (XBV-417), as Simulink shows them in the configuration parameters.
+ */
+export const ALGEBRAIC_LOOP_OPTION_KEYS = ['algTol', 'maxIter'] as const;
+
 /** The option fields whose text is invalid (as toolbar keys), for the solver in use. */
 export function invalidSolverOptionTexts(solver: string, texts: SolverOptionTexts): SolverOptionTextKey[] {
   const group = solverOptionGroup(solver);
   const bad: SolverOptionTextKey[] = [];
+  if (parseToleranceInput(texts.algTol) === null) bad.push('algTol');
+  if (parseIterationInput(texts.maxIter) === null) bad.push('maxIter');
   if (group === 'tolerances') {
     if (parseToleranceInput(texts.relative) === null) bad.push('relative');
     if (parseToleranceInput(texts.absolute) === null) bad.push('absolute');
@@ -94,6 +121,8 @@ const OPTION_MESSAGES: Record<SolverOptionTextKey, string> = {
   newtonIterations: 'Newton iterations must be an integer >= 1',
   maxStep: 'Max step size must be a finite number greater than 0 (or empty for auto)',
   minStep: 'Min step size must be a finite number greater than 0 and not greater than Max step size (or empty for auto)',
+  algTol: 'Algebraic loop tolerance must be a finite number greater than 0',
+  maxIter: 'Algebraic loop iterations must be an integer >= 1',
 };
 
 /** Error diagnostics for invalid option text of the solver in use (a run is refused, nothing is clamped). */
@@ -108,6 +137,10 @@ export function solverOptionDiagnostics(solver: string, texts: SolverOptionTexts
 /** Valid option texts as numbers, under the engine option names, for the solver in use (engine.options). */
 export function solverOptionsForRun(solver: string, texts: SolverOptionTexts) {
   const group = solverOptionGroup(solver);
+  // The algebraic loop solver runs under every solver, so its options are passed whatever the solver (XBV-417).
+  const algTol = parseToleranceInput(texts.algTol);
+  const maxIter = parseIterationInput(texts.maxIter);
+  const loop = { ...(algTol !== null ? { algTol } : {}), ...(maxIter !== null ? { maxIter } : {}) };
   if (group === 'tolerances') {
     const relTol = parseToleranceInput(texts.relative);
     const absTol = parseToleranceInput(texts.absolute);
@@ -117,17 +150,18 @@ export function solverOptionsForRun(solver: string, texts: SolverOptionTexts) {
     return {
       ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}),
       ...(maxStep !== undefined && maxStep !== null ? { maxStep } : {}), ...(minStep !== undefined && minStep !== null ? { minStep } : {}),
+      ...loop,
     };
   }
   if (group === 'extrapolation') {
     const extrapolationOrder = parseIterationInput(texts.extrapolationOrder);
     const newtonIterations = parseIterationInput(texts.newtonIterations);
-    return { ...(extrapolationOrder !== null ? { extrapolationOrder } : {}), ...(newtonIterations !== null ? { newtonIterations } : {}) };
+    return { ...(extrapolationOrder !== null ? { extrapolationOrder } : {}), ...(newtonIterations !== null ? { newtonIterations } : {}), ...loop };
   }
-  return {};
+  return loop;
 }
 
-/** Valid option texts as saved config fields (all four, whichever solver is selected). */
+/** Valid option texts as saved config fields (all of them, whichever solver is selected). */
 export function solverOptionsForSave(texts: SolverOptionTexts) {
   const relTol = parseToleranceInput(texts.relative);
   const absTol = parseToleranceInput(texts.absolute);
@@ -135,11 +169,14 @@ export function solverOptionsForSave(texts: SolverOptionTexts) {
   const newtonIterations = parseIterationInput(texts.newtonIterations);
   const maxS = parseStepLimitInput(texts.maxStep);
   const minS = parseStepLimitInput(texts.minStep);
+  const algTol = parseToleranceInput(texts.algTol);
+  const maxIter = parseIterationInput(texts.maxIter);
   const orderOk = !(typeof maxS === 'number' && typeof minS === 'number' && minS > maxS);
   return {
     ...(typeof maxS === 'number' && orderOk ? { maxStep: maxS } : {}), ...(typeof minS === 'number' && orderOk ? { minStep: minS } : {}),
     ...(relTol !== null ? { relTol } : {}), ...(absTol !== null ? { absTol } : {}),
     ...(extrapolationOrder !== null ? { extrapolationOrder } : {}), ...(newtonIterations !== null ? { newtonIterations } : {}),
+    ...(algTol !== null ? { algTol } : {}), ...(maxIter !== null ? { maxIter } : {}),
   };
 }
 
@@ -244,6 +281,8 @@ export interface XSimulationSettings {
   minStep?: number;
   extrapolationOrder?: number;
   newtonIterations?: number;
+  algTol?: number;
+  maxIter?: number;
 }
 
 export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: number): XSimulationSettings {
@@ -259,6 +298,8 @@ export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: n
     ...(config.minStep !== undefined ? { minStep: config.minStep } : {}),
     ...(config.extrapolationOrder !== undefined ? { extrapolationOrder: config.extrapolationOrder } : {}),
     ...(config.newtonIterations !== undefined ? { newtonIterations: config.newtonIterations } : {}),
+    ...(config.algTol !== undefined ? { algTol: config.algTol } : {}),
+    ...(config.maxIter !== undefined ? { maxIter: config.maxIter } : {}),
   };
 }
 
@@ -280,6 +321,8 @@ export function fromSimulationSettings(raw: unknown): XSimulationConfig | null {
   const minStep = posNum(r.minStep);
   const extrapolationOrder = posInt(r.extrapolationOrder);
   const newtonIterations = posInt(r.newtonIterations);
+  const algTol = posNum(r.algTol);
+  const maxIter = posInt(r.maxIter);
   return {
     solver: typeof r.solver === 'string' && r.solver ? r.solver : d.solver, startTime: start, stopTime: stop, fixedStep: step,
     ...(relTol !== undefined ? { relTol } : {}),
@@ -288,6 +331,8 @@ export function fromSimulationSettings(raw: unknown): XSimulationConfig | null {
     ...(minStep !== undefined && (maxStep === undefined || minStep <= maxStep) ? { minStep } : {}),
     ...(extrapolationOrder !== undefined ? { extrapolationOrder } : {}),
     ...(newtonIterations !== undefined ? { newtonIterations } : {}),
+    ...(algTol !== undefined ? { algTol } : {}),
+    ...(maxIter !== undefined ? { maxIter } : {}),
   };
 }
 

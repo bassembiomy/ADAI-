@@ -470,6 +470,20 @@ export class XbridgesEngine {
     if (Object.keys(accepted).length > 0) this.patchBlockParams(blockId, accepted);
   }
 
+  /** Message when options.algTol / options.maxIter is present but invalid; null when both are unset or valid. */
+  private loopOptionProblem(): string | null {
+    const o = this.options as { algTol?: unknown; maxIter?: unknown } | undefined;
+    const a = o?.algTol;
+    const m = o?.maxIter;
+    if (a !== undefined && !(typeof a === 'number' && Number.isFinite(a) && a > 0)) {
+      return `Algebraic loop tolerance must be a finite number > 0 (algTol = ${String(a)}).`;
+    }
+    if (m !== undefined && !(typeof m === 'number' && Number.isSafeInteger(m) && m >= 1)) {
+      return `Algebraic loop iteration limit must be an integer >= 1 (maxIter = ${String(m)}).`;
+    }
+    return null;
+  }
+
   public compile(startTime = 0): ModelDiagnostic[] {
     resetTwinRunState(); // run-level state held outside the blocks starts from its initial value (XBV-188)
     this.diagnostics = [];
@@ -606,6 +620,11 @@ export class XbridgesEngine {
 
     // Simulink-equivalent compile-time checks (connectivity, sample times / solver, parameter constraints).
     this.diagnostics.push(...runModelChecks(this.flatBlocks, this.flatConnections, this.options));
+
+    const loopOptionProblem = this.loopOptionProblem();
+    if (loopOptionProblem !== null && !this.diagnostics.some(d => d.code === 'STIFF_SOLVER_INVALID_OPTION')) {
+      this.diagnostics.push({ severity: 'error', code: 'STIFF_SOLVER_INVALID_OPTION', message: loopOptionProblem });
+    }
 
     this.sortedBlocks = sortedBlocks;
     this.cycleBlocks = cycleBlocks;
@@ -1196,7 +1215,7 @@ export class XbridgesEngine {
     }
 
     // 2. Solve algebraic loops
-    if (this.cycleBlocks.length > 0) {
+    if (this.cycleBlocks.length > 0 && this.loopOptionProblem() === null) {
       const algTol = this.options?.algTol ?? 1e-6;
       const maxIter = this.options?.maxIter ?? 100;
       this.solveAlgebraicLoop(time, tempStates, algTol, maxIter);
