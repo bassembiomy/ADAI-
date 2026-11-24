@@ -911,7 +911,7 @@ export class XbridgesEngine {
     const absNorm = (v: number[]) => v.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
     // dF/dz by central differences, h and 2h combined (error O(h^4), no truncation error for a cubic); null when F is not
     // finite at any of the four points. An entry within the rounding noise of the difference quotient, 32 eps |F_i| / h,
-    // cannot be told from zero and is set to zero (J); the matrix without that step is returned as well (raw), for the
+    // cannot be told from zero and is set to zero (J); where F is not finite on one side the one-sided difference (forward, then backward, step 1e-6 scale) is used; the matrix without that step is returned as well (raw), for the
     // case where every entry of a row is noise (|F| so large that no derivative is resolved) and J is singular.
     const jacobianOf = (zv: number[], fv: number[]): { J: number[][]; raw: number[][] } | null => {
       const J: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
@@ -919,13 +919,28 @@ export class XbridgesEngine {
       for (let j = 0; j < n; j++) {
         const h = 1e-4 * Math.max(1, Math.abs(zv[j]));
         const at = (d: number) => evaluateF(zv.map((v, i) => (i === j ? v + d : v)));
-        const p1 = at(h), m1 = at(-h), p2 = at(2 * h), m2 = at(-2 * h);
-        if (!finite(p1) || !finite(m1) || !finite(p2) || !finite(m2)) return null;
-        const d1 = p1.map((v, i) => (v - m1[i]) / (2 * h));
-        const col = d1.map((v, i) => (4 * v - (p2[i] - m2[i]) / (4 * h)) / 3);
+        const p1 = at(h), m1 = at(-h);
+        let col: number[] | null = null;
+        let hUsed = h;
+        if (finite(p1) && finite(m1)) {
+          const d1 = p1.map((v, i) => (v - m1[i]) / (2 * h));
+          const p2 = at(2 * h), m2 = at(-2 * h);
+          col = finite(p2) && finite(m2) ? d1.map((v, i) => (4 * v - (p2[i] - m2[i]) / (4 * h)) / 3) : d1;
+        } else {
+          // F is not finite on one side (e.g. a square root at its domain edge): a one-sided difference on the finite side,
+          // forward first, then backward. Both sides non-finite: the column is unusable.
+          const hf = 1e-6 * Math.max(1, Math.abs(zv[j]));
+          const pf = at(hf);
+          if (finite(pf)) { col = pf.map((v, i) => (v - fv[i]) / hf); hUsed = hf; }
+          else {
+            const mf = at(-hf);
+            if (finite(mf)) { col = mf.map((v, i) => (fv[i] - v) / hf); hUsed = hf; }
+          }
+        }
+        if (!col || !finite(col)) return null;
         for (let i = 0; i < n; i++) {
           J[i][j] = raw[i][j] = (i === j ? 1 : 0) - col[i];
-          if (Math.abs(J[i][j]) <= (32 * EPS * Math.abs(fv[i])) / h) J[i][j] = 0;
+          if (Math.abs(J[i][j]) <= (32 * EPS * Math.abs(fv[i])) / hUsed) J[i][j] = 0;
         }
       }
       return finite(raw.flat()) ? { J, raw } : null;
