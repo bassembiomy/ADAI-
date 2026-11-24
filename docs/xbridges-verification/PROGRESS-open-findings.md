@@ -8,7 +8,7 @@ updates are committed and pushed together with the work they describe. Detailed 
 
 - **Branch:** `arena/87db4611-adai`. Push only there. `automative` was merged at `55ed35a5` and must stay green, so
   merge into it only when every test passes (see "Merge rule").
-- **Last updated:** 2026-11-24, after `ec9130e9`.
+- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 dispatched to Sonnet).
 
 ## How to run the work (roles — the user's standing instruction)
 
@@ -128,6 +128,20 @@ then merge into `automative`.
 ---
 
 ## Log (newest first)
+
+- **2026-11-24 WP-B3 started.**
+  - **Dispatched:** to Sonnet (`xbv-executor`), editing only `XbridgesEngine.ts` `solveAlgebraicLoopCore`.
+  - **Baseline timings, two runs each (wall seconds):**
+
+    | Test files | Run 1 | Run 2 |
+    | --- | --- | --- |
+    | xbEngineB | 7.5 | 5.4 |
+    | xbEngine + xbWp21Engine + xbLoopOptions | 8.1 | 8.3 |
+    | xbWp21Blocks + xbEquations.motor | 8.2 | 8.1 |
+
+  - **If the session ended here:** check `git status`. If `XbridgesEngine.ts` is modified but not committed, run
+    acceptance A–E from section "Next steps 1" on it before trusting it, or discard it with
+    `git checkout -- src/engine/xbridges/XbridgesEngine.ts` and dispatch WP-B3 again.
 
 - **2026-11-24 `ec9130e9`.** The XBV-436 lab was corrected.
   - **Defects:** seven, LAB-1, DL-1 and NL-1 to NL-5, documented in the lab header.
