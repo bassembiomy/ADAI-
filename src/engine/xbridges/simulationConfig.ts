@@ -281,6 +281,8 @@ export interface XSimulationSettings {
   minStep?: number;
   extrapolationOrder?: number;
   newtonIterations?: number;
+  algTol?: number;
+  maxIter?: number;
 }
 
 export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: number): XSimulationSettings {
@@ -296,6 +298,8 @@ export function toSimulationSettings(config: XSimulationConfig, resolvedStep?: n
     ...(config.minStep !== undefined ? { minStep: config.minStep } : {}),
     ...(config.extrapolationOrder !== undefined ? { extrapolationOrder: config.extrapolationOrder } : {}),
     ...(config.newtonIterations !== undefined ? { newtonIterations: config.newtonIterations } : {}),
+    ...(config.algTol !== undefined ? { algTol: config.algTol } : {}),
+    ...(config.maxIter !== undefined ? { maxIter: config.maxIter } : {}),
   };
 }
 
@@ -317,6 +321,8 @@ export function fromSimulationSettings(raw: unknown): XSimulationConfig | null {
   const minStep = posNum(r.minStep);
   const extrapolationOrder = posInt(r.extrapolationOrder);
   const newtonIterations = posInt(r.newtonIterations);
+  const algTol = posNum(r.algTol);
+  const maxIter = posInt(r.maxIter);
   return {
     solver: typeof r.solver === 'string' && r.solver ? r.solver : d.solver, startTime: start, stopTime: stop, fixedStep: step,
     ...(relTol !== undefined ? { relTol } : {}),
@@ -325,6 +331,8 @@ export function fromSimulationSettings(raw: unknown): XSimulationConfig | null {
     ...(minStep !== undefined && (maxStep === undefined || minStep <= maxStep) ? { minStep } : {}),
     ...(extrapolationOrder !== undefined ? { extrapolationOrder } : {}),
     ...(newtonIterations !== undefined ? { newtonIterations } : {}),
+    ...(algTol !== undefined ? { algTol } : {}),
+    ...(maxIter !== undefined ? { maxIter } : {}),
   };
 }
 

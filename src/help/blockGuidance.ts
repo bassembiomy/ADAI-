@@ -427,30 +427,15 @@ Object.assign(BLOCK_GUIDANCE, POWERTRAIN_GUIDANCE);
 const SIMULINK_DIFFERENCES: Record<string, string> = {
   INTEGRATOR_CONTINUOUS: 'Embedded path (D9): every block in tick k sees the start-of-tick time t_k, and a continuous state publishes its value at t_k and is updated to t_(k+1) after all outputs, which is the Simulink output-then-update order.',
   RATE_LIMITER: 'Initial condition (D12): ADIA adds an explicit initialCondition (default 0) that Simulink lacks; it is the output before the first sample. With a discrete sample time the first output is the input clamped from that initial value by one sample of each slew rate; with an inherited (continuous) sample time the first output is the initial condition itself, because no time has elapsed yet.',
-  RELAY: 'Zero crossings (D15): the fixed-step solvers (Euler, Heun, fixed Bogacki-Shampine, RK4, ODE5, ode14x) do not locate zero crossings, as Simulink with zero-crossing detection off for fixed-step simulation (its default); the relay mode then changes at a major step, the output grid stays k times the step, and a batch run equals the canvas step. Adaptive ODE23, ODE45 and TR-BDF2 keep event location. A crossing function that only touches zero and returns is not an event: batch and canvas both hold the mode.',
-  DEADZONE: 'Zero crossings (D15): a dead zone that a signal only touches tangentially (the input equals a limit and returns) is not located as an event by the adaptive solvers, which is the Simulink rule for a zero-crossing function without a sign change; the input passes through the touch region unchanged.',
+  RELAY: 'Zero crossings (D15): the fixed-step solvers (Euler, Heun, fixed Bogacki-Shampine, RK4, ODE5, ode14x) do not locate zero crossings, as Simulink with zero-crossing detection off for fixed-step simulation (its default); the relay mode then changes at a major step, the output grid stays k times the step, and a batch run equals the canvas step. Adaptive ODE23, ODE45 and TR-BDF2 keep event location. Current behaviour, provisional until the Simulink comparison (XBV-419): a crossing function that only touches zero and returns is not treated as an event, and batch and canvas both hold the mode.',
+  DEADZONE: 'Zero crossings (D15): a dead zone that a signal only touches tangentially (the input equals a limit and returns) is currently not located as an event by the adaptive solvers and the input passes through the touch region unchanged. This is the current ADIA behaviour and is provisional, pending the Simulink comparison (XBV-420).',
   MatrixDiag: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal). Simulink has separate blocks for the two directions and no diagMode option, and neither does ADIA now.',
   Diag: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal).',
   DiagExtract: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal).',
   ExtractDiag: 'Diagonal blocks (D17): they follow MATLAB diag, so the input shape decides (a vector builds a diagonal matrix, a matrix gives its diagonal).',
-  ROBOT_VACUUM_SLAM: 'Occupancy grid (D18): the grid is updated once per major step (Simulink discrete-update semantics), not at every solver stage, so the fixed-step and adaptive solvers now produce the same map.',
-  ROBOT_VACUUM_MAPPING: 'Occupancy grid (D18): the grid is updated once per major step (Simulink discrete-update semantics), not at every solver stage, so the fixed-step and adaptive solvers now produce the same map.',
 };
 for (const [typeId, text] of Object.entries(SIMULINK_DIFFERENCES)) {
   const entry = BLOCK_GUIDANCE[`xbridges:${typeId}`];
-  if (!entry) continue;
+  if (!entry) throw new Error(`SIMULINK_DIFFERENCES has no BLOCK_GUIDANCE entry for ${typeId}`);
   entry.behavior = entry.behavior ? `${entry.behavior} ${text}` : text;
 }
-// A relay and a dead zone hold their mode between major steps: the same D15 note is worth having on the canvas help too.
-BLOCK_GUIDANCE['xbridges:SolverPaneDifferences'] = {
-  description: 'Where an X-Bridges solver deliberately differs from Simulink, with the reason.',
-  behavior: [
-    'Fixed-step zero crossings (D15): Euler, Heun, fixed Bogacki-Shampine, RK4, ODE5 and ode14x do not locate zero crossings, as Simulink with zero-crossing detection off for fixed-step simulation (its default); the adaptive ODE23, ODE45 and TR-BDF2 solvers do.',
-    'Zero-crossing tangency: a signal that only touches a threshold and returns is not an event (a zero-crossing function needs a sign change), so a Relay keeps its mode and a Dead Zone passes the touch unchanged.',
-    'Output grid (D19): output times stay on k times the fixed step with the stop time hit exactly; there is no separate output-times list, and the removed stiffDetect option has no replacement because Simulink and MATLAB ode45 report no stiffness.',
-    'Algebraic loop solver (XBV-417): the loop tolerance and Newton iteration limit are the toolbar fields Loop Tol and Loop Iter. (defaults 1e-6 and 100), applied under every solver.',
-    'Embedded tick time base (D9): every block in tick k sees the start-of-tick time t_k, and states are updated to t_(k+1) after all outputs.',
-    'Simulink goldens (D4): the golden comparison has not been run, because MATLAB is not installed on the verification machine, so gate G is pending for every block; the blocks are verified against analytic oracles instead.',
-  ].join(' '),
-  example: 'Run a Relay with switchOn 0.25 and switchOff 0 under RK4 and under ODE23: the fixed-step run switches at a major step only, the adaptive run locates the crossing.',
-};
