@@ -8,7 +8,7 @@ updates are committed and pushed together with the work they describe. Detailed 
 
 - **Branch:** `arena/87db4611-adai`. Push only there. `automative` was merged at `55ed35a5` and must stay green, so
   merge into it only when every test passes (see "Merge rule").
-- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 verifier FAIL; regression acceptance committed, fix dispatched).
+- **Last updated:** 2026-11-24, after `8ab47ec5` (XBV-436 fixed: `6b5f2875` + `95fbb387`).
 
 ## How to run the work (roles — the user's standing instruction)
 
@@ -36,9 +36,9 @@ The full `test:xbridges` takes about 8–20 minutes. The two host-compile suites
 
 ## Merge rule
 
-The branch holds acceptance tests that fail **on purpose** until the fix lands. Today: 8 in
-`src/utils/stateMachine/xbFloat32Ops.test.ts` (XBV-434) and 4 in `src/engine/xbridges/verification/xbLoopDomain.test.ts`
-(WP-B3 regression). The 5 XBV-436 targets in `xbEngineB` describe `e` pass since `6b5f2875`. Do not merge the branch into `automative` until these pass.
+The branch holds acceptance tests that fail **on purpose** until the fix lands. Today: only the 8 in
+`src/utils/stateMachine/xbFloat32Ops.test.ts` (XBV-434). Everything else is green (full `test:xbridges` after `95fbb387`:
+5543 passed, 8 failed, 56 skipped). Do not merge the branch into `automative` until these pass.
 
 ---
 
@@ -55,9 +55,9 @@ The branch holds acceptance tests that fail **on purpose** until the fix lands. 
 | | WP-A5 close-out | to do | — |
 | XBV-436 far loop roots | WP-B1 acceptance | done (5 failing by design) | `6852e9a0`; resolution floor for root 3.16e8 in `ec9130e9` |
 | | WP-B2 lab | **done: NLEQ-ERR green 12/12 from zero, worst 613 evaluations** | `ec9130e9`, D24 revised; the first verdict ("cannot work") was a lab defect |
-| | WP-B3 port NLEQ-ERR into the engine | **verifier FAIL, rework in progress** | `6b5f2875` (5 targets green, no false roots), regression on loops undefined on one side: acceptance `xbLoopDomain.test.ts` |
+| | WP-B3 port NLEQ-ERR into the engine | **done** | `6b5f2875` port; verifier FAIL on loops undefined on one side → acceptance `827e80ed`, fix `95fbb387` |
 | XBV-439 Gauss-Seidel pre-pass false root | new, found by the WP-B3 verifier, older than WP-B3 | open, to plan | ledger XBV-439 |
-| | WP-B4 close-out | to do | — |
+| | WP-B4 close-out | **done — XBV-436 fixed, D21 closed** | ledger + report; the Simulink zero-start comparison still waits for MATLAB |
 | | Simulink check of the zero start | script ready, waiting for MATLAB | `06becad6`, `901670c3`: `far_root_loop.m`, `xbGoldenLoop.test.ts` |
 | XBV-419 / 420 tangent touch | WP-C1 script, WP-C3 harness | done | `c96efcfa`: `tangent_touch.m`, `xbGoldenTangent.test.ts` (24 named skips) |
 | | WP-C2 MATLAB run | **waiting for the user's machine** | — |
@@ -80,23 +80,7 @@ comparison tests run by themselves.
 
 ## Next steps in order (with the brief each one needs)
 
-### 1. WP-B3 — port NLEQ-ERR into the engine (Sonnet, then Opus verifies)
-
-- **Edit only:** `src/engine/xbridges/XbridgesEngine.ts`, in `solveAlgebraicLoopCore`, about lines 755–1180.
-- **Source:** the NLEQ-ERR candidate in `scripts/xbridges-verification/loopLab.ts`, with its fixes NL-1 to NL-5 and
-  LAB-1, and the scaled linear solve.
-- **Keep:**
-  - the Gauss–Seidel pre-passes;
-  - one `algTol` / `maxIter` budget;
-  - the XBV-421 solution test (residual AND Newton correction within `algTol`);
-  - the diagnostics (`ALGEBRAIC_LOOP_NOT_CONVERGED` naming the loop blocks);
-  - the stiff-solver tight solve (`StiffSolver.computeOutputsTight`).
-- **Acceptance:** `xbEngineB.test.ts` describe `e` must become all green, and every other test in `xbEngineB`,
-  `xbEngine`, `xbLoopOptions`, `xbSolversB` and `xbDiagnostics` must stay green.
-- **Then:** run the full `test:xbridges`, plus the performance check (the PWM / ode45 timings in the WP-21 ledger note
-  must stay within +10 %).
-- **Risk:** converged values of loops that pass today can move within `algTol`. The tests pin to `algTol`, not to
-  bits.
+### 1. (done) WP-B3 / WP-B4 — XBV-436 fixed. See the log.
 
 ### 2. WP-A2 + WP-A3 — float32 per operation (two Sonnet executors in parallel, different files)
 
@@ -109,7 +93,14 @@ comparison tests run by themselves.
 - **Acceptance:** `xbFloat32Ops.test.ts` all green, and `xbCodeParityB` V7B-1 still 0 ULP for the non-libm blocks.
 - **Merge both together.** The interpreter and the C must agree at every merge.
 
-### 3. WP-A4, WP-A5, WP-B4 — close-outs
+### 3. WP-A4, WP-A5 — close-out of XBV-434, and XBV-439
+
+**XBV-439** (Gauss-Seidel pre-pass false root):
+- Write the acceptance first: y = y + 1e-12 (y² + 1) must be `ALGEBRAIC_LOOP_NOT_CONVERGED`.
+- Then the pre-pass may only accept a point that passes the same XBV-421 solution test as Newton.
+- Edit only `solveAlgebraicLoopCore`. Every loop test must stay green.
+
+**XBV-434 close-out:**
 
 Each close-out: remaining blocks, help text, the ledger set to `fixed` with the commits, `xbv:report`, the full gates,
 then merge into `automative`.
@@ -129,6 +120,14 @@ then merge into `automative`.
 ---
 
 ## Log (newest first)
+
+- **2026-11-24 `95fbb387` + ledger: XBV-436 fixed, D21 closed.**
+  - **The fix:** a one-sided finite difference restored where the central stencil is non-finite.
+  - **Tests:** xbLoopDomain 6 of 6, xbEngineB 264 of 264, the related files 436 of 436. Full suite: 5543 passed,
+    8 failed (XBV-434, expected).
+  - **Controller's check:** the controller diffed the full verifier probe. Only the four sqrt rows changed, and all four
+    are valid roots; no new false root.
+  - **Open findings now:** XBV-434, XBV-419, XBV-420 and XBV-439.
 
 - **2026-11-24 WP-B3 verifier: FAIL, rework.**
   - **Passed:** the acceptance A and B re-runs, the scope check, the timing (+3 to +5 %), and the false-root probes:
