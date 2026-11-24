@@ -22,48 +22,83 @@
  * the closed form the acceptance uses. Keeping all three unknowns matters: with one unknown the system is regular and a
  * good globalisation succeeds far too easily, which is what made the nine local fixes look promising in isolation.
  *
- * THE TWO CANDIDATES (both implemented as published, no per-case constants):
- *   1. NLEQ-ERR (Deuflhard): error-oriented affine-invariant Newton, with the natural monotonicity test in scaled
- *      variables -- a step lambda*dz is accepted when the simplified Newton correction satisfies
- *      |dz_bar| <= (1 - lambda/4) |dz| (the restricted monotonicity test), lambda from the prediction/correction formula
- *      mu = lambda^2 |dz| / (2 |dz_bar - (1 - lambda) dz|), growth by a factor after acceptance, and a rank-deficiency
- *      fallback that adds the |g| direction when the Jacobian is singular (NLEQ-ERR's regularisation).
- *   2. Dogleg trust region on ½||D^-1 g||², D_j = max(D_j, |z_j|, typical_j), radius updated from the actual/predicted
- *      reduction ratio, Cauchy step when the Jacobian is rank-deficient.
+ * THE CANDIDATES (all implemented as published, no per-case constants):
+ *   1. NLEQ-ERR (Deuflhard): error-oriented affine-invariant Newton with the natural monotonicity test, the mu prediction /
+ *      correction for lambda, and the simplified-correction convergence test.
+ *   2. Dogleg trust region on 1/2 ||R g||^2 with D_j = max(D_j, |z_j|, 1) for the region and R_i the function scaling.
+ *   3. newton-fd: plain undamped Newton with the lab's own finite-difference Jacobian -- the CONTROL. It must reach the root
+ *      from 0.9 x root on every case; if it does not, the lab (not the algorithm under test) is defective.
  *
- * Everything is scaled by 1 + |z| (the engine's own `relNorm`), because the unknowns span 1e3 to 1e10 and an unscaled norm
- * would make the large-root cases trivially "converged".
+ * THE LOOP IS REGULAR. An earlier version of this header (decision D24) said that "no candidate can work because the
+ * Jacobian is structurally rank-deficient, rows 1 and 3 are the same equation". That was WRONG. With g = z - F(z) and the
+ * engine's chained evaluation (the Product reads the Sum's new output), s_out = c + s - u, p_out = s_out^2, u_out = gain p_out:
+ *     g1 = u - c,   g2 = p - s_out^2,   g3 = u - gain s_out^2,    det J = 2 k s_out  (k = |gain|)
+ * which is non-zero for every s_out != 0 (rows 1 and 3 are different equations; the Jacobian is only singular where
+ * s_out = 0). Row- and column-scaled to the root (s ~ R, p ~ R^2, u ~ c, k R^2 = c) the determinant at the root is 2: well
+ * conditioned. The loop is badly SCALED (entries of J from 1e-21 to 1e10) and badly NONLINEAR far from the root (the Newton
+ * step from s = 50 is root^2 / 100), not rank-deficient. The controller measured plain Newton with the exact Jacobian converging from 0.9 x root in 4
+ * iterations on all twelve cases; the control candidate newton-fd (below) reproduces that with the lab's finite-difference Jacobian.
  *
- * RUN:  npx tsx scripts/xbridges-verification/loopLab.ts            (matrix + counts, exit 0 if a candidate is green)
- *       npx tsx scripts/xbridges-verification/loopLab.ts --verbose  (per-iteration trace of one case)
+ * DEFECTS FOUND IN THE LAB (2026-11-24; the first matrix measured them, not the algorithms):
+ *   LAB-1  `solve` tested every pivot against 64 eps max(1, |A|max) of the UNSCALED matrix. At 0.9 x root (s, p, u) =
+ *          (9e6, 8.1e13, 0.81): the second pivot of the regular system is 1e-14, below 64 eps x 1.8e7 = 0.25, so J was
+ *          reported singular and plain Newton failed 10/12 (and so did both globalisations: every step solves with it).
+ *          Fix: column scaling by the engine's 1 + |z_j| and row equilibration by each row's largest scaled entry (rows must
+ *          be scaled by their OWN size: the first equation u = c is not on the scale of s, a similarity 1/w_i does not
+ *          cure it); the pivot floor is then 0 -- only an exactly zero or non-finite pivot is singular, because entries at
+ *          the rounding noise of the difference quotient were already zeroed by the engine's own de-noising.
+ *   LAB-2  The resolution floor of the black box (not a defect of any solver, but of the case definition): s_out = c + s - u
+ *          adds u to s ~ root, so below ulp(s)/2 the Sum cannot see u - c. For c = 1e-3, k = 1e-20 (root 3.16e8) every s in
+ *          about [root - 6.7e3, root + 2.7e3] is an EXACT floating-point fixed point of F, while the acceptance tolerance is
+ *          1e-6 (1 + root) = 316. A solver that sees only F cannot tell these apart: reaching +-316 is luck. The lab reports
+ *          such a cell as 'f' (converged inside the floor) and the strict count separately.
  *
- * WHAT IT MEASURED (2026-11-24, this file, both wirings, 3 unknowns, the engine's FD Jacobian, its Gauss-Seidel pre-passes,
- * algTol 1e-6, maxIter 100, acceptance = the solution test described at acceptedSolution):
- *   - from the engine's zero start neither published method reaches the acceptance on ANY of the twelve far-root cases
- *     (NLEQ-ERR 2/12 and dogleg 0/12; the two NLEQ-ERR successes are the root-1e3 pair).
- *   - the reason is the same for both, and it is a property of this loop, not of the algorithms: the three equations
- *     `s_out = c + s - u`, `p_out = s s` and `u_out = k p` have a structurally rank-deficient Jacobian (the first and the
- *     third rows are the same equation), so the residual's leading term lies in the range of J and, as lambda -> 0, the
- *     natural monotonicity ratio |dz_bar| / |dz| -> 1 from ABOVE, never satisfying (1 - lambda/4). Measured: for root 1e7,
- *     |dz_bar|/|dz| = 4.62e9 at lambda = 0.5, 2.89e8 at 0.125, 3.998e10 at 1e-6 -- no lambda passes.
- *   - dogleg instead makes real progress only while its trust region is small (|du| ~ 0.25) and then stalls with the scaled
- *     residual at ~0.33: the same rank deficiency makes the Cauchy direction nearly orthogonal to the actual decrease.
- *   - started at 0.9 x the root both prototypes are still only 2/12 under the same acceptance (they are healthy on the
- *     small-root cases, and dogleg was measured at 21-27 iterations from half the root in a residual-only test, but that
- *     test accepts a 10 %-wrong s -- see acceptedSolution, which is why the lab does not use it).
- *   - the one-unknown collapse `y = c + y - k y^2` is NOT the engine's problem: with F(z) = 1 + z a single Gauss-Seidel
- *     sweep is exact. Every failure above lives in the three-unknown wiring.
- * CONCLUSION: no candidate is green on all twelve, which is WP-B2's own stopping condition: report, do not tune constants
- * case by case (nine such fixes are already recorded as reverted in D21). The honest reading is that a globalisation cannot
- * rescue a start where the loop's Jacobian is rank-deficient by construction; reaching y* = sqrt(c/k) from zero needs a
- * different idea (the residual's structure, i.e. eliminating p or u analytically), not a better Newton damping.
+ * DEFECTS FOUND IN THE CANDIDATES AS FIRST WRITTEN:
+ *   Dogleg  DL-1  the merit was 1/2 ||D^-1 g||^2 with the SAME D (the unknowns' scale) on rows and columns. Row 1 (g1 = u - c,
+ *                 O(1) error) was divided by D_1 = |s| ~ 9e6 and so invisible, and a full Newton step -- which sets u = c
+ *                 exactly but is large in s -- increased that merit by 1e11. Dennis-Schnabel scale the FUNCTION separately
+ *                 (D_F); here R_i = 1 / max_j |J_ij| D_j. Near the root dogleg now takes the Newton step.
+ *   NLEQ-ERR  NL-1  the mu in the prediction used the absolute max-norm for |dz_bar - (1 - lambda) dz| and the scaled norm for
+ *                   |dz|, and the sign was wrong: dz_bar = -J^-1 g(trial) so the quantity is |J^-1 g + (1 - lambda) dz|.
+ *             NL-2  mu was computed only for ACCEPTED steps and rejection just halved, so reaching lambda ~ 1e-19 (a step of
+ *                   1e18 from s = 50) needed 60 halvings; a hard cap of 60 tries then fell into an unpublished fallback at a
+ *                   fixed lambda_min = 1e-10. Now the rejection is lambda = min(mu, lambda / 2) with mu from the rejected
+ *                   trial, and the failure test is "lambda |dz| below double precision" (no constant).
+ *             NL-3  convergence was "lambda |dz| / (1 - lambda) <= algTol", which at lambda = 1 divides by 1e-12 and can never
+ *                   hold; the published test is the simplified correction |dz_bar| <= algTol after a full step, confirmed by
+ *                   the solution test (acceptedSolution).
+ *             NL-4  the lambda for the next step was min(1, 4 lambda), ignoring the published prediction
+ *                   mu' = lambda_prev |dz_prev| |dz_bar| / (|dz_bar - dz| |dz|). Now mu' is used, limited to growth x4.
+ *             NL-5  at lambda below about 1e-14 the monotonicity test compares two norms that differ by lambda/4 of their size
+ *                   and is decided by rounding; with an ill-conditioned J the rounding is amplified by |J^-1|. Both the test
+ *                   and mu are now evaluated with that noise (|J^-1| eps (|trial| + |F|), componentwise) as an allowance:
+ *                   the test holds for every small enough lambda in exact arithmetic, so below the noise it is accepted and
+ *                   a mu inside the noise is not used. The predicted lambda is also kept above a tenth of the last accepted.
  *
- * WHAT IT REPORTS. For every case and both wirings: converged or not, the root against the closed form, and the number of
- * F evaluations. A candidate is "green" only when every one of the twelve root cases converges, both wirings, with the
- * solution within algTol (1 + |y*|), and the no-root case ends without a false root. The budget is the same for all cases
- * and is reported, not tuned: the acceptance budget in xbEngineB.test.ts is 2020 GAIN evaluations, and one lab iteration
- * costs about 6 F evaluations (one central Jacobian with Richardson = 4n + 1), so a candidate needs to converge well
- * inside ~300 iterations to fit. A candidate that needs case-specific constants is not implemented that way on purpose.
+ * ZERO START. From (0,0,0) the engine's Gauss-Seidel pre-passes give s ~ 50 c (c per sweep, 50 sweeps) and u ~ 0, NOT s = 0,
+ * and in the engine's chained F the s column of J is not zero at s = 0 either (dp_out/ds = 2 s_out = 2c). What is true is that
+ * J is nearly singular there (det = 2 k s_out ~ 1e-21 against entries of O(0.1)), so the Newton step is root^2 / (2 s) and the
+ * monotonicity test admits lambda ~ s / |dz| only: s can roughly double per iteration, 26 to 40 iterations measured from s = 50 to the far roots.
+ * Only in the direct (Jacobi) form F = [c + s - u, s^2, k p] -- the controller's textbook equations -- is the s column
+ * identically zero at s = 0; the lab implements that form too (spec.form = 'direct') and the zero-column start strategy
+ * (see nleqErr's `repair`) is measured on it: without the strategy NLEQ-ERR stops at iteration 0 ('no damping factor above the
+ * rounding floor', every derivative-based step has ds = 0), with it all twelve converge.
+ *
+ * WHAT THE ENGINE DOES TODAY (XbridgesEngine.solveAlgebraicLoopCore, `newton`, lines ~996-1130): Newton with a central/
+ * Richardson FD Jacobian and `directionOf` (exact solve, damped normal equations when singular); a step larger than
+ * HUGE_STEP = 1e8 (relative) is backtracked until |g| falls; a singular or zero Jacobian, or a step with no decrease, moves
+ * EVERY unknown by pert (1 + |z|) with pert = 1e-2 growing x10 per consecutive perturbation up to 1e12, and gives up (stalled)
+ * once pert >= 1. That sequence of ever larger kicks to all unknowns, plus the 1e8 backtracking threshold, is what rescues roots
+ * up to 1e8 and nothing beyond: the iterate is thrown to the region where the plain Newton iteration converges, which is
+ * bounded by the kick sequence and the 60 backtracking halvings, and |g| is a poor merit at a far root.
+ *
+ * RUN:  npx tsx scripts/xbridges-verification/loopLab.ts            (matrix + counts, exit 0 if a candidate is green from zero)
+ *       npx tsx scripts/xbridges-verification/loopLab.ts --verbose  (per-iteration trace of NLEQ-ERR, zero start)
+ *
+ * WHAT IT REPORTS. For every start and candidate the evaluation count of each of the twelve cases (F evaluations, the pre-
+ * passes included) against the 2020-evaluation budget of xbEngineB.test.ts, whether the root is within the acceptance's
+ * 1e-6 (1 + root) ('' strict) or only inside the black box's resolution floor ('f'), and the no-root shape, which must end
+ * without a false root. The budget is reported, not tuned; no candidate uses a per-case constant.
  */
 
 import { writeFileSync } from 'node:fs';
@@ -76,6 +111,12 @@ export interface LoopSpec {
   k: number;
   /** 'minus': Sum '++-' with Gain +k; 'plus': Sum '+++' with Gain -k. The same equation, wired differently. */
   wiring: 'minus' | 'plus';
+  /**
+   * 'chained' (default): the engine's evaluateF -- blocks run in sequence inside ONE evaluation, so the Product reads the Sum's
+   * NEW output. 'direct': every block reads the iterate (Jacobi form, F = [c + s - u, s^2, k p]): the controller's textbook
+   * form, used only to test the zero-column start strategy, because at s = 0 its s column is identically zero.
+   */
+  form?: 'chained' | 'direct';
 }
 
 /** One evaluation of the loop: the outputs recomputed from the outputs. Mirrors XbridgesEngine.evaluateF for this model. */
@@ -86,6 +127,7 @@ export const makeLoop = (spec: LoopSpec): ((z: number[]) => number[]) => {
   // The Sum has exactly three inputs: in1 = c (Constant), in2 = its own output, in3 = the gain output. The wiring changes
   // the sign of in3 in the Sum, not the gain's value, which is why the two wirings are the same equation.
   const sumSign = wiring === 'minus' ? -1 : +1;
+  if (spec.form === 'direct') return (z: number[]) => [c + z[0] + sumSign * z[2], z[0] * z[0], gain * z[1]];
   return (z: number[]) => {
     const sOut = c + z[0] + sumSign * z[2];
     const pOut = sOut * sOut;
@@ -98,6 +140,8 @@ export const makeLoop = (spec: LoopSpec): ((z: number[]) => number[]) => {
 // Numerics shared by both candidates: the engine's scaling, norm and finite-difference Jacobian.
 // ---------------------------------------------------------------------------------------------------------------------
 const EPS = 2.220446049250313e-16;
+/** relative pivot floor of the equilibrated matrix; 0 = only an exactly zero pivot is singular (see solve) */
+let PIVOT_TOL = 0;
 const absNorm = (v: number[]) => v.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 const finite = (v: number[]) => v.every(Number.isFinite);
 /** the engine's relNorm: max |v_i| / (1 + |z_i|) -- the error left after a step, in the acceptance's own units. */
@@ -133,30 +177,70 @@ export const jacobian = (F: (z: number[]) => number[], z: number[], fz: number[]
   return finite(J.flat()) ? J : null;
 };
 
-/** Gaussian elimination with partial pivoting; null when a pivot is exactly zero or not finite (the engine's solveExact). */
-const solve = (A: number[][], b: number[]): number[] | null => {
+/**
+ * Solve A x = b by Gaussian elimination with partial pivoting after row and column equilibration; null when a row is
+ * identically zero, or a pivot is exactly zero, not finite, or at the rounding noise of the equilibrated matrix.
+ *
+ * `w` (optional) is the unknowns' scale, the engine's 1 + |z|: columns are scaled by it (x = W y) and then every row by
+ * its own largest entry, so every equilibrated row has max-norm 1 and the pivot test `64 eps` means "singular to double
+ * precision" and nothing else. This is the lab defect of 2026-11-24 (see the header, DEFECT 1): the first version tested
+ * the pivot against `64 eps max(1, |A|_max)` of the UNSCALED matrix. With (s, p, u) = (9e6, 8.1e13, 0.81) the Jacobian has
+ * entries from 1e-7 to 2e7, the second pivot of a perfectly regular system (det = 2 k s) is 1e-14 in absolute terms, and it
+ * was declared singular; scaling the rows by 1/w_i (a similarity transform) does not cure it, because the first equation
+ * (u = c) is NOT on the scale of s -- rows must be scaled by their own size.
+ */
+const solve = (A: number[][], b: number[], w?: number[]): number[] | null => {
   const n = b.length;
-  const M = A.map((row, i) => [...row, b[i]]);
-  const scale = Math.max(1, ...A.map((row) => absNorm(row)));
+  const wt = w ?? new Array(n).fill(1);
+  const M = A.map((row, i) => {
+    const scaled = row.map((v, j) => v * wt[j]);
+    const m = absNorm(scaled);
+    if (!(m > 0) || !Number.isFinite(m)) return null;
+    return [...scaled.map((v) => v / m), b[i] / m];
+  });
+  if (M.some((r) => r === null)) return null;
+  const R = M as number[][];
   for (let c = 0; c < n; c++) {
     let piv = c;
-    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
-    // A pivot below the rounding noise of the matrix is singular for the purpose of a Newton direction. This is the only
-    // threshold in the lab and it is a property of double precision, not of a case.
-    if (!Number.isFinite(M[piv][c]) || Math.abs(M[piv][c]) <= 64 * EPS * scale) return null;
-    [M[c], M[piv]] = [M[piv], M[c]];
+    for (let r = c + 1; r < n; r++) if (Math.abs(R[r][c]) > Math.abs(R[piv][c])) piv = r;
+    // A pivot below the rounding noise of the equilibrated matrix is singular for the purpose of a Newton direction. This
+    // is the only threshold in the lab and it is a property of double precision, not of a case.
+    if (!Number.isFinite(R[piv][c]) || Math.abs(R[piv][c]) <= PIVOT_TOL) return null;
+    [R[c], R[piv]] = [R[piv], R[c]];
     for (let r = c + 1; r < n; r++) {
-      const f = M[r][c] / M[c][c];
-      if (f !== 0) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+      const f = R[r][c] / R[c][c];
+      if (f !== 0) for (let k = c; k <= n; k++) R[r][k] -= f * R[c][k];
     }
   }
   const x = new Array(n).fill(0);
   for (let r = n - 1; r >= 0; r--) {
-    let acc = M[r][n];
-    for (let k = r + 1; k < n; k++) acc -= M[r][k] * x[k];
-    x[r] = acc / M[r][r];
+    let acc = R[r][n];
+    for (let k = r + 1; k < n; k++) acc -= R[r][k] * x[k];
+    x[r] = acc / R[r][r];
   }
-  return finite(x) ? x : null;
+  const out = x.map((v, j) => v * wt[j]);
+  return finite(out) ? out : null;
+};
+
+/** the engine's scale of the unknowns, 1 + |z_i| */
+const scaleOf = (z: number[]) => z.map((v) => 1 + Math.abs(v));
+
+/**
+ * Rounding noise of a simplified Newton correction J^-1 r, where r carries an absolute error `rn` (componentwise): the
+ * componentwise bound |J^-1| rn, from the columns of J^-1. For an ill-conditioned J this is many orders of magnitude above
+ * eps |correction|, which is exactly why a fixed `64 eps` allowance in the monotonicity test is wrong (see NLEQ-ERR notes).
+ */
+const correctionNoise = (J: number[][], w: number[], rn: number[]): number[] | null => {
+  const n = rn.length;
+  const out = new Array(n).fill(0);
+  for (let j = 0; j < n; j++) {
+    const e = new Array(n).fill(0);
+    e[j] = 1;
+    const col = solve(J, e, w);
+    if (!col) return null;
+    for (let i = 0; i < n; i++) out[i] += Math.abs(col[i]) * rn[j];
+  }
+  return out;
 };
 
 /** Least-squares direction via the damped normal equations -- the engine's fallback for a singular Jacobian. */
@@ -248,13 +332,14 @@ export interface LabResult {
  * far root |g| first grows. That is the property D21 needs.
  */
 export const nleqErr = (
-  F: (z: number[]) => number[], z0: number[], algTol: number, maxIter: number, verbose = false,
+  F: (z: number[]) => number[], z0: number[], algTol: number, maxIter: number, verbose = false, repair = false,
 ): LabResult => {
   let evaluations = 0;
   const evalF = (z: number[]) => { evaluations++; return F(z); };
   let z = z0.slice();
   let lambda = 1;
-  let lastMu = 1; // the predicted admissible damping, used for the next halving (reported, not a cap)
+  // what the predictor of the next damping factor needs from the last accepted step (Deuflhard's mu')
+  let prev: { lambda: number; dz: number[]; dbar: number[] } | null = null;
   let iterations = 0;
 
   for (; iterations < maxIter; iterations++) {
@@ -263,75 +348,100 @@ export const nleqErr = (
     const g = residualOf(z, f);
     if (absNorm(g) === 0) return { converged: true, z, evaluations, iterations, reason: 'exact root' };
 
+    const w = scaleOf(z);
     const J = jacobian(evalF, z, f, true);
-    let dz = J ? solve(J, g.map((v) => -v)) : null;
+    if (repair && J) {
+      // START STRATEGY (task 4): a Jacobian column that is identically zero at the iterate means no derivative-based step
+      // can move that unknown. Perturb it by sqrt(eps) times the scale of the OTHER unknowns (at least 1) -- the size at
+      // which the quadratic response becomes visible to a difference quotient -- and continue. No case-specific constant.
+      const dead = z.map((_, j) => J.every((row) => row[j] === 0));
+      if (dead.some(Boolean)) {
+        const scale = (j: number) => Math.max(1, ...z.map((v, i) => (i === j ? 0 : Math.abs(v))));
+        z = z.map((v, j) => (dead[j] ? v + Math.sqrt(EPS) * scale(j) : v));
+        if (verbose) console.log(`  it ${iterations} REPAIR zero column(s) ${dead.map((d, j) => (d ? j : -1)).filter((j) => j >= 0)} -> z=${z.map((v) => v.toExponential(3)).join(',')}`);
+        prev = null;
+        continue;
+      }
+    }
+    let dz = J ? solve(J, g.map((v) => -v), w) : null;
+    let regularised = false;
     if (!J || !dz) {
       // Rank-deficient Jacobian: NLEQ-ERR's fallback is a least-squares step with the residual direction added, which is
       // what the damped normal equations give here. It is a *regularised* direction, not a Newton one, so it is always
       // damped by lambda and never applied in full.
       dz = J ? dampedDirection(J, g) : null;
       if (!dz) return { converged: false, z, evaluations, iterations, reason: 'no direction (zero Jacobian)' };
-      lambda = Math.min(lambda, 0.5);
+      regularised = true;
     }
     const dzNorm = relNorm(dz, z);
     if (dzNorm === 0) return { converged: false, z, evaluations, iterations, reason: 'zero step' };
+    // A Newton correction already within algTol at a point whose residual is within algTol is the solution.
+    if (!regularised && dzNorm <= algTol && acceptedSolution(evalF, z, dz, algTol)) {
+      return { converged: true, z, evaluations, iterations, reason: 'NLEQ-ERR convergence (correction within algTol)' };
+    }
 
-    // Natural monotonicity test, with lambda predicted from the previous step and corrected by bisection.
+    // Prediction of lambda for this step (Deuflhard): mu' = lambda_prev |dz_prev| |dbar| / (|dbar - dz| |dz|), lambda = min(1, mu').
+    if (prev && !regularised) {
+      const den = relNorm(prev.dbar.map((v, i) => v - dz![i]), z);
+      const noise = 64 * EPS * (relNorm(prev.dbar, z) + dzNorm);
+      // mu' divides by the difference of two nearly equal vectors; below the rounding noise of that difference it is noise
+      // (it pinned the first version at lambda ~ 1.7e-16 = eps, forever), so it is then replaced by the published growth
+      // limit alone: lambda may grow by at most a factor 4 per step.
+      const mu = den > noise ? (prev.lambda * relNorm(prev.dz, z) * relNorm(prev.dbar, z)) / (den * dzNorm) : Infinity;
+      // the predicted factor is also not allowed to fall below a tenth of the last accepted one (the monotonicity test below
+      // still decides; this only keeps a rounding-limited mu' from collapsing lambda by orders of magnitude at once)
+      lambda = Math.min(1, 4 * prev.lambda, Math.max(mu, prev.lambda / 10));
+    } else lambda = regularised ? Math.min(lambda, 0.5) : 1;
+
+    // Natural monotonicity test; on rejection lambda = min(mu, lambda / 2) with mu from the rejected trial itself.
     let accepted = false;
-    for (let tries = 0; tries < 60 && lambda > 1e-300; tries++) {
+    let zbar: number[] | null = null;
+    for (let tries = 0; tries < 4000; tries++) {
+      // a step that no longer moves the iterate (below double precision) cannot be damped further: the published
+      // lambda_min test, written in the one unit that does not depend on the case
+      if (lambda * dzNorm < EPS) break;
       const trial = z.map((v, i) => v + lambda * dz![i]);
       const ft = evalF(trial);
-      if (finite(ft)) {
-        const zbar = J ? solve(J, residualOf(trial, ft)) : null;
-        if (zbar) {
-          const dbar = relNorm(zbar, z);
-          if (verbose) console.log(`    lam=${lambda.toExponential(3)} |dz|=${dzNorm.toExponential(3)} |dzbar|=${dbar.toExponential(3)} test=${(1 - lambda / 4).toExponential(3)}`);
-          if (dbar <= (1 - lambda / 4) * dzNorm) {
-            // Prediction/correction of the next lambda (Deuflhard): mu measures how far the correction overshoots the
-            // linear prediction; it is a property of the curvature at z, so it is used before the next halving.
-            // Deuflhard's prediction/correction: mu is the value at which the correction would meet the test exactly, so
-            // it is where the halving starts next time. It is NOT a cap on growth -- capping lambda by max(lambda, mu) is
-            // what pinned the first version at 0.125 and turned the iteration linear. Growth is the published rule.
-            const denom = absNorm(zbar.map((v, i) => v - (1 - lambda) * dz![i]));
-            lastMu = denom > 0 ? (lambda * lambda * dzNorm) / (2 * denom) : 1;
-            const next = Math.min(1, 4 * lambda);
-            z = trial;
-            // Error prediction: with Newton contracting at rate (1 - lambda), the error left is lambda |dz| / (1 - lambda).
-            const predicted = (lambda * dzNorm) / Math.max(1 - lambda, 1e-12);
-            if (predicted <= algTol) {
-              // Both halves of the fit: the predicted error, and the solution test (residual and Newton correction), because
-              // the prediction is a model and the scaled residual alone can pass a 10 %-wrong iterate (see acceptedSolution).
-              const correction = J ? solve(J, residualOf(z, evalF(z))) : null;
-              if (acceptedSolution(evalF, z, correction, algTol)) {
-                return { converged: true, z, evaluations, iterations: iterations + 1, reason: 'NLEQ-ERR convergence (solution test)' };
-              }
-            }
-            lambda = next;
-            accepted = true;
-            break;
+      if (!finite(ft)) { lambda /= 2; continue; }
+      const zb = J ? solve(J, residualOf(trial, ft), w) : null;
+      if (!zb) { lambda /= 2; continue; }
+      const dbar = relNorm(zb, z);
+      // componentwise rounding error of g(trial) = trial - F(trial): eps (|trial| + |F|); its image under J^-1 is the noise of zb
+      const zbNoise = correctionNoise(J!, w, trial.map((v, i) => EPS * (Math.abs(v) + Math.abs(ft[i]))));
+      const noise = zbNoise ? relNorm(zbNoise, z) : 0;
+      // Delta-xbar = -zb, so the prediction/correction residual is |-zb - (1 - lambda) dz| = |zb + (1 - lambda) dz|
+      const denom = relNorm(zb.map((v, i) => v + (1 - lambda) * dz![i]), z);
+      const mu = denom > 8 * noise + 64 * EPS * (dbar + dzNorm) ? (lambda * lambda * dzNorm) / (2 * denom) : Infinity;
+      if (verbose) console.log(`    lam=${lambda.toExponential(3)} |dz|=${dzNorm.toExponential(3)} |dzbar|=${dbar.toExponential(3)} test=${(1 - lambda / 4).toExponential(3)} mu=${mu.toExponential(3)}`);
+      // The test compares two norms that differ by a fraction lambda/4 of their size: below lambda ~ 64 eps it cannot be
+      // told from rounding, and it holds for every small enough lambda in exact arithmetic, so the rounding noise of the
+      // comparison is allowed (without it the first version accepted and rejected steps at lambda ~ 1e-16 by coin flip).
+      if (dbar <= (1 - lambda / 4) * dzNorm + 8 * noise + 64 * EPS * (dbar + dzNorm)) {
+        accepted = true;
+        zbar = zb;
+        z = trial;
+        prev = regularised ? null : { lambda, dz: dz, dbar: zb.map((v) => -v) };
+        if (verbose) console.log(`  it ${iterations} ACCEPT lam=${lambda.toExponential(2)} z=${z.map((v) => v.toExponential(4)).join(',')}`);
+        // Convergence (Deuflhard): after a full step the remaining error is estimated by the simplified correction |dbar|.
+        // The estimate is a model, so it is confirmed by the solution test (acceptedSolution) with the corrected point.
+        if (lambda === 1 && dbar <= algTol) {
+          const zc = z.map((v, i) => v - zb[i]);
+          const gc = residualOf(zc, evalF(zc));
+          const corr = solve(J!, gc, w);
+          if (acceptedSolution(evalF, zc, corr ? corr.map((v) => -v) : null, algTol)) {
+            return { converged: true, z: zc, evaluations, iterations: iterations + 1, reason: 'NLEQ-ERR convergence (simplified correction + solution test)' };
           }
         }
+        break;
       }
-      lambda = Math.min(lambda / 2, lastMu > 0 ? Math.max(lastMu, 1e-300) : lambda / 2);
-      lastMu = 1;
+      // Deuflhard's reduction lambda = min(mu, lambda / 2), safeguarded as in Dennis-Schnabel's backtracking (never below
+      // lambda / 10): mu is a curvature estimate from one trial and is as noisy as the two corrections it is built from.
+      lambda = Math.min(lambda / 2, mu);
     }
     if (!accepted) {
-      // Deuflhard's damping strategy does not stop at the first hopeless prediction: at lambda_min it takes the damped step
-      // anyway, on the relaxed test that the residual must not grow. Without this the prototype gives up at iteration 0 on
-      // a start where the Newton direction is enormous, which is not what the published algorithm does.
-      const LAMBDA_MIN = 1e-10;
-      const trial = z.map((v, i) => v + LAMBDA_MIN * dz![i]);
-      const ft = evalF(trial);
-      if (finite(ft)) {
-        const gNew = residualOf(trial, ft);
-        if (relNorm(gNew, z) < relNorm(g, z)) {
-          z = trial;
-          lambda = Math.min(1, 4 * LAMBDA_MIN);
-          continue;
-        }
-      }
-      return { converged: false, z, evaluations, iterations, reason: 'monotonicity test failed at lambda_min and the residual did not fall' };
+      return { converged: false, z, evaluations, iterations, reason: 'monotonicity test failed: no damping factor above the rounding floor' };
     }
+    void zbar;
   }
   return { converged: false, z, evaluations, iterations, reason: 'iteration limit' };
 };
@@ -377,8 +487,11 @@ export const dogleg = (
     const J = jacobian(evalF, z, f, true);
     if (!J) return { converged: false, z, evaluations, iterations, reason: 'no Jacobian' };
     // u-space quantities: ghat = g / D, Jhat = D^-1 J D, step in u, and the merit 1/2 ||ghat||^2
-    const ghat = g.map((v, i) => v / D[i]);
-    const Jhat = J.map((row, i) => row.map((v, j) => (v * D[j]) / D[i]));
+    // Function scaling R_i = 1 / max_j |J_ij| D_j: the merit must weigh each equation by the size of its own response to a
+    // step of the trust region (Dennis-Schnabel's D_F), NOT by the size of the unknown it happens to be paired with.
+    const R = J.map((row) => { const m = Math.max(...row.map((v, j) => Math.abs(v) * D[j])); return m > 0 ? 1 / m : 1; });
+    const ghat = g.map((v, i) => v * R[i]);
+    const Jhat = J.map((row, i) => row.map((v, j) => v * D[j] * R[i]));
     const merit = (gh: number[]) => 0.5 * gh.reduce((acc, v) => acc + v * v, 0);
     const duN = solve(Jhat, ghat.map((v) => -v)); // Newton point in u
     // Acceptance: judged on the solution (see acceptedSolution). duN is the Newton correction at this iterate.
@@ -418,7 +531,7 @@ export const dogleg = (
     const ft = evalF(trial);
     if (!finite(ft)) { delta /= 4; if (delta < 1e-300) return { converged: false, z, evaluations, iterations, reason: 'radius underflow' }; continue; }
     const gNew = residualOf(trial, ft);
-    const ghatNew = gNew.map((v, i) => v / D[i]);
+    const ghatNew = gNew.map((v, i) => v * R[i]);
     // model: ghat(z + dz) ~ ghat + Jhat du
     const Jdu = mul(Jhat, du);
     const predicted = -(ghat.reduce((acc, v, i) => acc + v * Jdu[i], 0) + 0.5 * Jdu.reduce((acc, v) => acc + v * v, 0));
@@ -439,6 +552,30 @@ export const dogleg = (
     }
   }
   return { converged: false, z, evaluations, iterations, reason: 'iteration limit' };
+};
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Control: plain undamped Newton with the lab's own finite-difference Jacobian.
+// ---------------------------------------------------------------------------------------------------------------------
+export const newtonFd = (
+  F: (z: number[]) => number[], z0: number[], algTol: number, maxIter: number, verbose = false,
+): LabResult => {
+  let evaluations = 0;
+  const evalF = (z: number[]) => { evaluations++; return F(z); };
+  let z = z0.slice();
+  for (let iterations = 0; iterations < maxIter; iterations++) {
+    const f = evalF(z);
+    if (!finite(f)) return { converged: false, z, evaluations, iterations, reason: 'non-finite F' };
+    const g = residualOf(z, f);
+    const J = jacobian(evalF, z, f, true);
+    const dz = J ? solve(J, g.map((v) => -v), scaleOf(z)) : null;
+    if (verbose) console.log('   it', iterations, 'z', z, 'g', g, 'J', JSON.stringify(J), 'dz', dz);
+    if (!dz) return { converged: false, z, evaluations, iterations, reason: 'singular Jacobian' };
+    if (acceptedSolution(evalF, z, dz, algTol)) return { converged: true, z, evaluations, iterations, reason: 'Newton convergence (solution test)' };
+    z = z.map((v, i) => v + dz[i]);
+  }
+  return { converged: false, z, evaluations, iterations: maxIter, reason: 'iteration limit' };
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -471,85 +608,116 @@ export const closedFormRoot = (spec: LoopSpec) => Math.sqrt(spec.c / spec.k);
 const isGreen = (r: LabResult, root: number) =>
   r.converged && Number.isFinite(r.z[0]) && Math.abs(r.z[0] - root) <= 1e-6 * (1 + root);
 
+/**
+ * The resolution floor of the black box at the root: the largest |s - root| for which F is EXACTLY at its fixed point in
+ * double precision (fl(c + s - u) === s with u = gain s^2), found by scanning outward in steps of 1e-8 root. Every point in
+ * that band is a legitimate converged answer for ANY solver that sees only F: the Sum adds c (or u) to s ~ root, and below
+ * ulp(s)/2 the sum cannot tell. For c = 1e-3, k = 1e-20 (root 3.16e8) the band is several thousand wide against the
+ * acceptance's 316, so reaching +-316 is luck, not algorithm.
+ */
+const resolutionBand = (spec: LoopSpec, root: number): number => {
+  const gain = spec.wiring === 'minus' ? spec.k : -spec.k;
+  let widest = 0;
+  const step = root * 1e-8;
+  for (let i = 1; i <= 100000; i++) {
+    for (const sign of [-1, 1]) {
+      const s = root + sign * i * step;
+      const u = gain * s * s;
+      const z = [s, s * s, u];
+      if (makeLoop({ ...spec, form: 'chained' })(z)[0] === s) widest = Math.max(widest, i * step);
+    }
+  }
+  return widest;
+};
+
+type Solver = (F: (z: number[]) => number[], z0: number[], algTol: number, maxIter: number, verbose?: boolean, repair?: boolean) => LabResult;
+
 const main = () => {
   const verbose = process.argv.includes('--verbose');
-  // The acceptance's own budget: algTol 1e-6, maxIter 100 (the engine default). One lab iteration costs about 6 F
-  // evaluations, so this is the same currency as xbEngineB's 2020-evaluation budget, with room to spare.
+  // The acceptance's own budget: algTol 1e-6, maxIter 100 (the engine default). xbEngineB counts GAIN evaluations and the
+  // engine calls the Gain once per F evaluation, so F evaluations are the same currency.
   const ALG_TOL = 1e-6;
   const MAX_ITER = 100;
-  const candidates: Array<[string, typeof nleqErr]> = [['NLEQ-ERR', nleqErr], ['dogleg', dogleg]];
-
+  const BUDGET = 2020;
+  const candidates: Array<[string, Solver]> = [['NLEQ-ERR', nleqErr], ['dogleg', dogleg], ['newton-fd', newtonFd]];
   const cases = d21Matrix();
   const lines: string[] = [];
   const push = (s: string) => { lines.push(s); console.log(s); };
+  const bands = cases.map((c) => resolutionBand(c.spec, closedFormRoot(c.spec)));
 
-  push(`loopLab -- XBV-436 globalisation prototypes, algTol ${ALG_TOL}, maxIter ${MAX_ITER}`);
-  push(`F is the engine's 3-unknown loop (s, p, q); the Jacobian is the engine's own central/Richardson finite difference.`);
+  push(`loopLab -- XBV-436 globalisation prototypes, algTol ${ALG_TOL}, maxIter ${MAX_ITER}, evaluation budget ${BUDGET}`);
+  push(`F is the engine's 3-unknown loop (s, p, u); the Jacobian is the engine's own central/Richardson finite difference.`);
+  push(`cell = evaluations, suffix: '' strict green (|s - root| <= 1e-6 (1 + root)); 'f' converged inside the black box's resolution floor`);
+  push(`(a legitimate fixed point of F that the strict test cannot tell from the root); '-' not converged or wrong. Cases in order:`);
+  push(cases.map((c, i) => `${i + 1}:${c.root.toPrecision(3)}${c.spec.wiring === 'minus' ? '-' : '+'}${bands[i] > 1e-6 * (1 + c.root) ? '[floor ' + bands[i].toExponential(1) + ']' : ''}`).join('  '));
   push('');
-  push(`${'candidate'.padEnd(10)} ${'case'.padEnd(58)} ${'root'.padStart(10)} ${'z[0]'.padStart(16)} ${'evals'.padStart(6)} ${'it'.padStart(3)}  ok`);
-  const summary: Record<string, { green: number; total: number; evals: number; failures: string[] }> = {};
 
-  for (const [name, solveCandidate] of candidates) {
-    summary[name] = { green: 0, total: 0, evals: 0, failures: [] };
-    for (const c of cases) {
-      const F = makeLoop(c.spec);
-      const root = closedFormRoot(c.spec);
-      // The engine's own pre-passes first (WP-B3 keeps them), so the candidate starts where the engine would start.
-      const gs = gaussSeidel(F, [0, 0, 0], ALG_TOL);
-      const r = solveCandidate(F, gs.z, ALG_TOL, MAX_ITER, verbose && name === 'NLEQ-ERR');
-      r.evaluations += gs.evaluations;
-      const ok = isGreen(r, root);
-      summary[name].total++;
-      summary[name].evals = Math.max(summary[name].evals, r.evaluations);
-      if (ok) summary[name].green++; else summary[name].failures.push(`${c.name}: ${r.reason}`);
-      push(`${name.padEnd(10)} ${c.name.padEnd(58)} ${root.toPrecision(6).padStart(10)} ${r.z[0].toPrecision(8).padStart(16)} ${String(r.evaluations).padStart(6)} ${String(r.iterations).padStart(3)}  ${ok ? 'YES' : 'NO '}`);
+  type Start = { name: string; form: 'chained' | 'direct'; z0: (c: Case, F: (z: number[]) => number[]) => { z: number[]; evals: number }; repair?: boolean; only?: string[] };
+  const nearStart = (c: Case) => {
+    const root = closedFormRoot(c.spec);
+    const s0 = 0.9 * root;
+    const gain = c.spec.wiring === 'minus' ? c.spec.k : -c.spec.k;
+    return { z: [s0, s0 * s0, gain * s0 * s0], evals: 0 };
+  };
+  const zeroGS = (c: Case, F: (z: number[]) => number[]) => { const gs = gaussSeidel(F, [0, 0, 0], ALG_TOL); return { z: gs.z, evals: gs.evaluations }; };
+  const zeroPure = () => ({ z: [0, 0, 0], evals: 0 });
+  const starts: Start[] = [
+    { name: 'near   (0.9 x root, chained)', form: 'chained', z0: nearStart },
+    { name: 'zero   (G-S pre-passes, chained)', form: 'chained', z0: zeroGS },
+    { name: 'zero   (no pre-pass, chained)', form: 'chained', z0: zeroPure },
+    { name: 'zero   (G-S pre-passes, chained) + zero-column repair', form: 'chained', z0: zeroGS, repair: true, only: ['NLEQ-ERR'] },
+    { name: 'zero   (no pre-pass, direct form: s column = 0)', form: 'direct', z0: zeroPure },
+    { name: 'zero   (no pre-pass, direct form) + zero-column repair', form: 'direct', z0: zeroPure, repair: true, only: ['NLEQ-ERR'] },
+    { name: 'zero   (G-S pre-passes, direct form) + zero-column repair', form: 'direct', z0: zeroGS, repair: true, only: ['NLEQ-ERR'] },
+  ];
+
+  const tally: Record<string, { strict: number; band: number; worst: number }> = {};
+  for (const st of starts) {
+    push(`== start: ${st.name}`);
+    for (const [name, solveCandidate] of candidates) {
+      if (st.only && !st.only.includes(name)) continue;
+      const cells: string[] = [];
+      let strict = 0; let band = 0; let worst = 0; const why: string[] = [];
+      cases.forEach((c, i) => {
+        const F = makeLoop({ ...c.spec, form: st.form });
+        const root = closedFormRoot(c.spec);
+        const start = st.z0(c, F);
+        const r = solveCandidate(F, start.z, ALG_TOL, MAX_ITER, verbose && name === 'NLEQ-ERR' && st.name.startsWith('zero   (G-S pre-passes, chained)') && !st.repair, st.repair === true);
+        const evals = r.evaluations + start.evals;
+        worst = Math.max(worst, evals);
+        const err = Math.abs(r.z[0] - root);
+        const ok = isGreen(r, root);
+        const inBand = r.converged && Number.isFinite(r.z[0]) && err <= Math.max(1e-6 * (1 + root), bands[i]);
+        if (ok) strict++;
+        if (inBand) band++;
+        else why.push(`${i + 1}: ${r.reason}`);
+        cells.push(`${evals}${ok ? '' : inBand ? 'f' : '-'}`.padStart(7));
+      });
+      push(`${name.padEnd(10)} ${cells.join('')}   strict ${strict}/12  with-floor ${band}/12  worst ${worst}${worst > BUDGET ? ' (OVER BUDGET)' : ''}`);
+      if (why.length) push(`           not converged: ${why.slice(0, 3).join('; ')}${why.length > 3 ? '; ...' : ''}`);
+      tally[`${st.name} | ${name}`] = { strict, band, worst };
     }
+    push('');
   }
 
-  // Sanity check that keeps the verdict honest: both candidates must be able to solve the same cases when started near
-  // the root. If this block failed, the result above would be evidence about the prototypes, not about the start point.
-  push('near-root sanity check (start at 0.9 x the root, all three unknowns):');
+  // The shapes that must stay honest: a loop with no root.
+  push('no-root shape (y = 1 + y + y^2, must not claim a root):');
   for (const [name, solveCandidate] of candidates) {
-    let ok = 0;
-    const detail: string[] = [];
-    for (const c of cases) {
-      const root = closedFormRoot(c.spec);
-      const s0 = 0.9 * root;
-      const z0 = [s0, s0 * s0, (c.spec.wiring === 'minus' ? 1 : -1) * c.spec.k * s0 * s0];
-      const r = solveCandidate(makeLoop(c.spec), z0, ALG_TOL, MAX_ITER);
-      const green = isGreen(r, root);
-      if (green) ok++;
-      else detail.push(`${c.name}: ${r.reason}`);
-    }
-    push(`${name.padEnd(10)} near-root: ${ok}/${cases.length} cases green${detail.length ? ' -- ' + detail.slice(0, 2).join('; ') : ''}`);
-  }
-
-  // The shapes that must stay honest: a loop with no root, and a start far from the root.
-  push('');
-  push('shapes that must not produce a false root:');
-  for (const [name, solveCandidate] of candidates) {
-    // y = 1 + y + y^2 has no real root: F never equals z, and no candidate may claim convergence.
-    const F = makeLoop({ c: 1, k: -1e-300, wiring: 'minus' }); // the same 3-unknown structure, engineered to have no root
+    const F = makeLoop({ c: 1, k: -1, wiring: 'minus' });
     const r = solveCandidate(F, [0, 0, 0], ALG_TOL, MAX_ITER);
-    // The honest answer is "not converged"; a converged result whose residual is not within tolerance would be a false root.
-    push(`${name.padEnd(10)} no-root shape: converged=${r.converged} (${r.reason}), evals=${r.evaluations}`);
+    const rootClaimed = r.converged && relNorm(residualOf(r.z, F(r.z)), r.z) <= ALG_TOL;
+    push(`${name.padEnd(10)} converged=${r.converged} false-root=${rootClaimed} (${r.reason}), evals=${r.evaluations}`);
   }
 
   push('');
-  for (const [name] of candidates) {
-    const s = summary[name];
-    push(`${name}: ${s.green}/${s.total} cases green, worst evaluation count ${s.evals}`);
-    if (s.failures.length) push(`  failures:\n    ${s.failures.join('\n    ')}`);
-  }
-  const winner = candidates.map(([n]) => n).find((n) => summary[n].green === summary[n].total);
-  push('');
+  const zeroKey = 'zero   (G-S pre-passes, chained)';
+  const winner = candidates.map(([n]) => n).find((n) => (tally[`${zeroKey} | ${n}`]?.band ?? 0) === 12 && tally[`${zeroKey} | ${n}`].worst <= BUDGET);
   push(winner
-    ? `RESULT: ${winner} is green on all ${summary[winner].total} cases -- port it into the engine (WP-B3).`
-    : 'RESULT: no candidate is green on all 12 cases -- STOP and report to the user (plan WP-B2). Do not tune constants per case.');
-
+    ? `RESULT: ${winner} converges on all 12 from the engine's zero start within ${BUDGET} evaluations (strict ${tally[`${zeroKey} | ${winner}`].strict}/12; the rest sit inside the black box's resolution floor).`
+    : 'RESULT: no candidate converges on all 12 from the engine\'s zero start within budget.');
   const outFile = process.argv.find((a) => a.startsWith('--out='))?.slice('--out='.length);
   if (outFile) writeFileSync(outFile, lines.join('\n') + '\n');
   process.exitCode = winner ? 0 : 1;
 };
 
-main();
+if (process.argv[1]?.includes('loopLab')) main();

@@ -323,23 +323,35 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(CASES.map((c) => c[0])).toEqual([1e3, 1e7, 1e8, 316227766.01683795, 1e9, 1e10]);
     });
 
+    // RESOLUTION FLOOR (review 2026-11-24, measured): the Sum adds c - k y^2 to y ~ root, so a y that is delta off the root
+    // changes the Sum output by about 2 c delta / root, which is lost below half an ulp of y when |delta| < root ulp(root) / (4 c).
+    // Every y in that band is an exact floating-point fixed point of the loop, so no solver that sees only the loop can tell
+    // them apart. Bound used: max(algTol (1 + root), root ulp(root) / (2 c)), twice the half-band. It is derived, not fitted,
+    // and it only changes the 3.16e8 case (band 9.4e3 against 316; measured exact fixed points from root - 6700 to
+    // root + 2650). Every other case keeps algTol (1 + root).
+    const ulpOf = (x: number) => { const a = Math.abs(x); const e = Math.floor(Math.log2(a)); return 2 ** (e - 52); };
+    const resolvable = (root: number, c: number) => Math.max(1e-6 * (1 + root), (root * ulpOf(root)) / (2 * c));
+    it('the resolution floor is above algTol only for the root-3.16e8 case', () => {
+      expect(CASES.filter(([root, c]) => resolvable(root, c) > 1e-6 * (1 + root)).map((x) => x[0])).toEqual([316227766.01683795]);
+    });
+
     for (const [root, c, k] of CASES) {
       for (const wiring of ['minus', 'plus'] as const) {
-        it(`y = ${c} + y ${wiring === 'minus' ? '-' : '+'} ${k} y^2 (root ${root.toPrecision(6)}), wiring '${wiring}': converges to the closed form within algTol, no error, within ${EVAL_BUDGET} evaluations`, () => {
+        it(`y = ${c} + y ${wiring === 'minus' ? '-' : '+'} ${k} y^2 (root ${root.toPrecision(6)}), wiring '${wiring}': converges to the closed form within algTol (or the resolution floor), no error, within ${EVAL_BUDGET} evaluations`, () => {
           const r = probe(ckLoop(c, k, wiring));
           expect(r.codes.filter((x) => x === 'ALGEBRAIC_LOOP_NOT_CONVERGED'), `engine said ${r.codes.join(', ')} with y = ${r.y}`).toEqual([]);
           expect(r.fatal).toBe(false);
-          expect(Math.abs(r.y - root), `s.out = ${r.y}, root = ${root}`).toBeLessThanOrEqual(1e-6 * (1 + root));
+          expect(Math.abs(r.y - root), `s.out = ${r.y}, root = ${root}`).toBeLessThanOrEqual(resolvable(root, c));
           expect(r.evals, 'loop evaluations').toBeLessThanOrEqual(EVAL_BUDGET);
         });
       }
     }
 
-    it('the two wirings of the same equation give the same root (within algTol): the result must not depend on the drawing', () => {
+    it('the two wirings of the same equation give the same root (within algTol, or the resolution floor): the result must not depend on the drawing', () => {
       for (const [root, c, k] of CASES.slice(0, 4)) {
         const a = probe(ckLoop(c, k, 'minus'));
         const b = probe(ckLoop(c, k, 'plus'));
-        expect(Math.abs(a.y - b.y), `root ${root}: ${a.y} vs ${b.y}`).toBeLessThanOrEqual(2e-6 * (1 + root));
+        expect(Math.abs(a.y - b.y), `root ${root}: ${a.y} vs ${b.y}`).toBeLessThanOrEqual(2 * resolvable(root, c)); // each within its own bound
       }
     });
 
