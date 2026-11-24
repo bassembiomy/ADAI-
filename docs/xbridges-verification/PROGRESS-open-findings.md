@@ -8,7 +8,7 @@ updates are committed and pushed together with the work they describe. Detailed 
 
 - **Branch:** `arena/87db4611-adai`. Push only there. `automative` was merged at `55ed35a5` and must stay green, so
   merge into it only when every test passes (see "Merge rule").
-- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 dispatched to Sonnet).
+- **Last updated:** 2026-11-24, after `8ab47ec5` (WP-B3 implemented, uncommitted, under verification).
 
 ## How to run the work (roles — the user's standing instruction)
 
@@ -128,6 +128,26 @@ then merge into `automative`.
 ---
 
 ## Log (newest first)
+
+- **2026-11-24 WP-B3 implemented, not yet committed.**
+  - **Executor's results:**
+    - `XbridgesEngine.ts`: +160 / −253 lines.
+    - `xbEngineB`: 264 of 264 pass.
+    - The 7 related test files: 436 of 436 pass.
+    - `tsc`: clean.
+    - Full `test:xbridges`: 5537 passed, 8 failed (all XBV-434, expected), 56 skipped.
+    - Timings are within noise of the baseline.
+  - **Controller's re-run:** 341 of 341 pass (xbEngineB, xbLoopOptions, xbEngine).
+  - **Deviations from the lab, still being verified:**
+    1. a rate-based error estimate for multiple roots;
+    2. the Aitken limit, used only when the residual is unresolved;
+    3. a correction at the rounding floor (≤ 1e-14) is accepted;
+    4. a retry with the raw Jacobian when the denoised one is singular;
+    5. the old one-sided finite-difference fallback for a non-finite F was dropped.
+  - **Now:** the `xbv-verifier` (Opus) is checking for false roots, for loops whose F is non-finite on one side, and
+    for timing.
+  - **If the session ended here:** the engine change exists only in the working tree. Re-run the verifier brief
+    (acceptance A–E plus the five deviations) before committing it.
 
 - **2026-11-24 WP-B3 started.**
   - **Dispatched:** to Sonnet (`xbv-executor`), editing only `XbridgesEngine.ts` `solveAlgebraicLoopCore`.
