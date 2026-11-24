@@ -142,6 +142,12 @@
    "date": "2026-11-24",
    "topic": "XBV-434 float32 libm contract: interpreter = C at <= 1 ULP, sqrt exact",
    "decision": "Measured, not assumed (32768 float32 arguments per function, gcc 12 -O2, glibc 2.36 builtins so no FMA contraction): fround(Math.fn(x)) differs from the C float function on 326/32768 arguments for sinf, 532 cosf, 24 expf, 110 logf, 2654 powf, 1214 atanf, 2480 asinf and 8756 tanhf (tanh by up to 2 ULP), always by at most 1 float32 ULP; sqrtf is exact on every argument. Therefore the float32 libm contract is interpreter = generated C at <= 1 float32 ULP for sin/cos/exp/log/pow/atan/asin/tanh, and 0 ULP for sqrt. A 0-ULP libm contract would need a float-libm shim that reproduces glibc bit for bit (a table or a port of its algorithms); that is explicitly NOT taken here. Math.pow is not an oracle for powf. Pinned in xbFloat32Ops.test.ts (SIN at x = -1.807373046875, where sinf and (float)sin differ by one ULP)."
+  },
+  {
+   "id": "D24",
+   "date": "2026-11-24",
+   "topic": "XBV-436 WP-B2: two published globalisations measured outside the engine -- neither reaches the far root",
+   "decision": "Measured, not argued (scripts/xbridges-verification/loopLab.ts, npx tsx, committed 3ba4cb8). The lab works on a black-box F(z) of the engine's real loop, with the engine's own finite-difference Jacobian and its Gauss-Seidel pre-passes, so a candidate starts where the engine starts. The loop has THREE unknowns (s, p, u = the gain output); collapsing y = c + y - k y^2 to the one-variable y = 1 + y is a one-step exact solve and is NOT what the engine solves. Candidates: NLEQ-ERR (Deuflhard: natural monotonicity in scaled variables, prediction/correction of lambda, lambda_min fallback) and a Powell dogleg trust region on the scaled merit with D_j = max(D_j, |z_j|, 1). RESULT at algTol 1e-6 / maxIter 100, both wirings: from the engine's zero start NLEQ-ERR converges on 2 of 12 far-root cases (the root-1e3 pair) and dogleg on 0 of 12; from 0.9 x the root both reach 2 of 12 under the engine's solution test (residual AND Newton correction within algTol, XBV-421). Per the plan's own stopping rule (WP-B2: if neither candidate is green, stop and report, do not tune constants per case) the port into the engine (WP-B3) was NOT started and the engine is unchanged. WHY: the equations s_out = c + s - u, p_out = s s and u_out = k p give a structurally rank-deficient Jacobian (rows 1 and 3 are the same equation), so the residual's leading term lies in the range of J and the natural monotonicity ratio |dz_bar|/|dz| tends to 1 from ABOVE as lambda -> 0, never meeting (1 - lambda/4); measured on root 1e7 it is 4.6e9 at lambda 0.5, 2.9e8 at 0.125 and 4.0e10 at 1e-6. The dogleg makes progress only while its region is small (|du| ~ 0.25) and then stalls at a scaled residual of 0.33, for the same reason. The obstacle is therefore not the damping strategy but the rank-deficient start: any repair has to use the residual's structure (eliminate p or u analytically) rather than a better step rule. Three defects in the prototypes were found by measuring and are recorded in the file: the missing Gauss-Seidel pre-passes; a lambda growth capped by mu instead of min(1, 4 lambda), which pinned lambda at 0.125 and made the iteration linear; and an acceptance that passed a 10 %-wrong s, because a residual of 0.19 over |s| = 9e6 is 2e-8 in the scaled norm. XBV-436 stays OPEN, now with this negative result on record so it is not attempted again as a local scaling change."
   }
  ],
  "wps": [
@@ -2966,8 +2972,8 @@
    "severity": "S4",
    "gate": "V4",
    "status": "open",
-   "summary": "Algebraic loops with roots above about 1e8 from a zero start depend on the wiring: y = 1 + y - k y^2 converges for k = 1e-18 / 1e-20 (roots 1e9 / 1e10) with Sum '++-' and Gain +k but is fatal with Sum '+++' and Gain -k; y = 1e-3 + y - 1e-20 y^2 (root 3.16e8) and k = 1e-22 are fatal in both wirings. All honest fatals (no false roots). Found by the E16 verifier.",
-   "decision": "D21"
+   "summary": "Algebraic loops with roots above about 1e8 from a zero start depend on the wiring: y = 1 + y - k y^2 converges for k = 1e-18 / 1e-20 (roots 1e9 / 1e10) with Sum '++-' and Gain +k but is fatal with Sum '+++' and Gain -k; y = 1e-3 + y - 1e-20 y^2 (root 3.16e8) and k = 1e-22 are fatal in both wirings. All honest fatals (no false roots). Found by the E16 verifier. Acceptance committed as the 14-case describe in xbEngineB.test.ts (5 rows failing by design, 6852e9a). D24 records why two published globalisations (NLEQ-ERR, dogleg) do not reach the root either: the loop's Jacobian is structurally rank deficient, so the fix is not a better step rule.",
+   "decision": "D21, D24"
   },
   {
    "id": "XBV-437",
