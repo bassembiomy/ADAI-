@@ -1,6 +1,6 @@
 {
   "files": 109,
-  "fingerprint": "95bcb0344d4b68c7761045e9b42c85ef6d95e575a92529614029509ac3dba80b",
+  "fingerprint": "1a27bec5ab021bbc0555391d22521d748680334adaa5f11fd2d1564c83c06908",
   "items": [
     {
       "source": "src/App.tsx",
@@ -22991,7 +22991,37 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3768,
+      "line": 3767,
+      "tag": "input",
+      "signature": "input|onChange:{e=>setSolverOptionText('algTol',e.target.value)}",
+      "handlers": {
+        "onChange": "{e => setSolverOptionText('algTol', e.target.value)}"
+      },
+      "feature": "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21",
+      "status": "documented",
+      "featureIds": [
+        "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21"
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
+    },
+    {
+      "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "line": 3782,
+      "tag": "input",
+      "signature": "input|onChange:{e=>setSolverOptionText('maxIter',e.target.value)}",
+      "handlers": {
+        "onChange": "{e => setSolverOptionText('maxIter', e.target.value)}"
+      },
+      "feature": "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4",
+      "status": "documented",
+      "featureIds": [
+        "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4"
+      ],
+      "reason": "Direct stable feature binding resolves to a live instructional destination."
+    },
+    {
+      "source": "src/components/xbridges/XbridgesWorkspace.tsx",
+      "line": 3800,
       "tag": "input",
       "signature": "input|onChange:{e=>setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9a-zA-Z.+-]/g,''))}",
       "handlers": {
@@ -23006,7 +23036,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3797,
+      "line": 3829,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowDiagnostics(v=>!v)}",
       "handlers": {
@@ -23021,7 +23051,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3820,
+      "line": 3852,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('push')}",
       "handlers": {
@@ -23036,7 +23066,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3828,
+      "line": 3860,
       "tag": "button",
       "signature": "button|onClick:{()=>handle3dxSyncInit('pull')}",
       "handlers": {
@@ -23051,7 +23081,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3862,
+      "line": 3894,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(onSave)persistWorkspace(nodes,edges);onBack();}}",
       "handlers": {
@@ -23066,7 +23096,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3885,
+      "line": 3917,
       "tag": "button",
       "signature": "button|onClick:{()=>setViewPath(viewPath.slice(0,idx+1))}",
       "handlers": {
@@ -23081,7 +23111,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3899,
+      "line": 3931,
       "tag": "div",
       "signature": "div|onContextMenu:{(e)=>e.preventDefault()}",
       "handlers": {
@@ -23101,7 +23131,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3918,
+      "line": 3950,
       "tag": "ReactFlow",
       "signature": "ReactFlow|onConnect:{onConnect}|onDragOver:{(e)=>e.preventDefault()}|onDrop:{onDrop}|onEdgesChange:{onEdgesChange}|onInit:{setReactFlowInstance}|onNodeClick:{onNodeClick}|onNodeDoubleClick:{onNodeDoubleClick}|onNodeDragStop:{onNodeDragStop}|onNodesChange:{onNodesChange}|onNodesDelete:{onNodesDelete}|onPaneClick:{(e)=>{if(e.detail===2){setSearchMenuPos({x:e.clientX,y:e.clientY});}else{setSearchMenuPos(null);setSearchTerm('');}setSelectedNodeId(null);}}|onSelectionChange:{({nodes:selectedNodes})=>{if(selectedNodes.length===1){setSelectedNodeId(selectedNodes[0].id);}elseif(selectedNodes.length===0){setSelectedNodeId(null);}}}",
       "handlers": {
@@ -23127,7 +23157,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 3989,
+      "line": 4021,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLabGuideMinimized(false)}",
       "handlers": {
@@ -23142,7 +23172,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4005,
+      "line": 4037,
       "tag": "button",
       "signature": "button|onClick:{()=>setIsLabGuideMinimized(true)}",
       "handlers": {
@@ -23157,7 +23187,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4017,
+      "line": 4049,
       "tag": "button",
       "signature": "button|onClick:{exitActiveLab}",
       "handlers": {
@@ -23172,7 +23202,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4078,
+      "line": 4110,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(currentStepIndex>0){setCurrentStepIndex(currentStepIndex-1);setCompletedObjectives({});}}}",
       "handlers": {
@@ -23187,7 +23217,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4090,
+      "line": 4122,
       "tag": "button",
       "signature": "button|onClick:{()=>{if(allDone){if(currentStepIndex<totalSteps-1){setCurrentStepIndex(currentStepIndex+1);setCompletedObjectives({});}else{setLabCompleted(true);}}}}",
       "handlers": {
@@ -23202,7 +23232,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4120,
+      "line": 4152,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(true)}",
       "handlers": {
@@ -23217,7 +23247,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4130,
+      "line": 4162,
       "tag": "XbridgesDiagnosticPopup",
       "signature": "XbridgesDiagnosticPopup|onDismiss:{dismissPopup}|onShowAll:{showAllDiagnostics}",
       "handlers": {
@@ -23231,7 +23261,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4138,
+      "line": 4170,
       "tag": "XbridgesStatusBar",
       "signature": "XbridgesStatusBar|onExpandedChange:{setShowDiagnostics}|onOpenHelp:{(topicId,sectionId)=>onOpenHelp?.(topicId,sectionId)}|onSelectBlocks:{showDiagnosticBlocks}",
       "handlers": {
@@ -23246,7 +23276,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4157,
+      "line": 4189,
       "tag": "XbridgesPropertiesPanel",
       "signature": "XbridgesPropertiesPanel|onClose:{()=>setSelectedNodeId(null)}|onCollapseToggle:{setIsPropsCollapsed}|onExportDoeData:{onExportDoeData}|onInvalidParameter:{onInvalidParameter}|onLaunchDoe:{onLaunchDoe}|onUpdate:{updateBlock}",
       "handlers": {
@@ -23264,7 +23294,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4185,
+      "line": 4217,
       "tag": "XbridgesRootLocusWindow",
       "signature": "XbridgesRootLocusWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
       "handlers": {
@@ -23278,7 +23308,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4196,
+      "line": 4228,
       "tag": "XbridgesScopeWindow",
       "signature": "XbridgesScopeWindow|onClose:{()=>setOpenScopes(prev=>prev.filter(id=>id!==scopeId))}|onUpdate:{(newData)=>updateBlock(scopeId,{params:{...scopeNode.data.params,...newData}})}",
       "handlers": {
@@ -23292,7 +23322,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4269,
+      "line": 4301,
       "tag": "button",
       "signature": "button|onClick:{exitActiveLab}",
       "handlers": {
@@ -23307,7 +23337,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4288,
+      "line": 4320,
       "tag": "button",
       "signature": "button|onClick:{()=>setShow3dxSyncModal(false)}",
       "handlers": {
@@ -23322,7 +23352,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4320,
+      "line": 4352,
       "tag": "select",
       "signature": "select|onChange:{(e)=>setSelectedTdxWorkspace(e.target.value)}",
       "handlers": {
@@ -23337,7 +23367,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4330,
+      "line": 4362,
       "tag": "button",
       "signature": "button|onClick:{handle3dxPush}",
       "handlers": {
@@ -23352,7 +23382,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4345,
+      "line": 4377,
       "tag": "div",
       "signature": "div|onClick:{()=>handle3dxPull(doc.id)}",
       "handlers": {
@@ -23367,7 +23397,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4365,
+      "line": 4397,
       "tag": "div",
       "signature": "div|onMouseDown:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -23382,7 +23412,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4366,
+      "line": 4398,
       "tag": "div",
       "signature": "div|onMouseDown:{e=>e.stopPropagation()}",
       "handlers": {
@@ -23395,7 +23425,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4381,
+      "line": 4413,
       "tag": "button",
       "signature": "button|onClick:{()=>setShowConfirmClear(false)}",
       "handlers": {
@@ -23410,7 +23440,7 @@
     },
     {
       "source": "src/components/xbridges/XbridgesWorkspace.tsx",
-      "line": 4387,
+      "line": 4419,
       "tag": "button",
       "signature": "button|onClick:{()=>{setNodes([]);setEdges([]);setSelectedNodeId(null);setShowConfirmClear(false);}}",
       "handlers": {
@@ -23665,7 +23695,7 @@
     }
   ],
   "statusCounts": {
-    "documented": 1403,
+    "documented": 1405,
     "excluded": 167
   }
 }

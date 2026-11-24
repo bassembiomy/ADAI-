@@ -1622,6 +1622,24 @@ export const LIVE_UI_FEATURES: HelpFeature[] = [
     "module": "system"
   },
   {
+    "id": "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21",
+    "label": "Loop Tol (algebraic loop tolerance)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
+    "id": "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4",
+    "label": "Loop Iter. (algebraic loop iterations)",
+    "topicId": "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4",
+    "sectionId": "use",
+    "sourcePath": "src/components/xbridges/XbridgesWorkspace.tsx",
+    "kind": "action",
+    "module": "system"
+  },
+  {
     "id": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
     "label": "Max Step (maximum step size)",
     "topicId": "live:components/xbridges/XbridgesWorkspace:4a64eb2dda0b",
@@ -5052,6 +5070,44 @@ export const LIVE_UI_TOPICS: Record<string,HelpTopic> = {
         "id": "use",
         "title": "Newton Iter. (ode14x)",
         "body": "Number of Newton iterations of each implicit solve of the Implicit Extrapolation solver (ode14x); the field is shown only for this solver. Default 1. The value must be an integer of 1 or more: an invalid value is marked in the field and the run is refused.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:8c1a7d3f4e21": {
+    "title": "Loop Tol (algebraic loop tolerance)",
+    "category": "Workspace Controls",
+    "description": "Solution tolerance of the algebraic loop solver, shown in the X-Bridges toolbar beside the solver options (default 1e-6). An algebraic loop is solved at every major step by Newton with a finite-difference Jacobian; a step is accepted when the estimated error left on the loop signal is within this tolerance of 1 + |signal|, so a large loop signal needs a smaller value for the same absolute accuracy. Enter a finite number greater than 0. An empty or invalid value is marked in the field and the run is refused with STIFF_SOLVER_INVALID_OPTION; nothing is clamped. A looser value converges in fewer iterations but leaves a larger loop error; a tighter value can use up the iteration limit and report ALGEBRAIC_LOOP_NOT_CONVERGED. This is the Simulink configuration parameter Algebraic loop solver tolerance. It is saved with the model and applies to every solver, because loops are solved under fixed- and variable-step solvers alike.",
+    "content": "Solution tolerance of the algebraic loop solver, shown in the X-Bridges toolbar beside the solver options (default 1e-6). An algebraic loop is solved at every major step by Newton with a finite-difference Jacobian; a step is accepted when the estimated error left on the loop signal is within this tolerance of 1 + |signal|, so a large loop signal needs a smaller value for the same absolute accuracy. Enter a finite number greater than 0. An empty or invalid value is marked in the field and the run is refused with STIFF_SOLVER_INVALID_OPTION; nothing is clamped. A looser value converges in fewer iterations but leaves a larger loop error; a tighter value can use up the iteration limit and report ALGEBRAIC_LOOP_NOT_CONVERGED. This is the Simulink configuration parameter Algebraic loop solver tolerance. It is saved with the model and applies to every solver, because loops are solved under fixed- and variable-step solvers alike.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Loop Tol (algebraic loop tolerance)",
+        "body": "Solution tolerance of the algebraic loop solver, shown in the X-Bridges toolbar beside the solver options (default 1e-6). An algebraic loop is solved at every major step by Newton with a finite-difference Jacobian; a step is accepted when the estimated error left on the loop signal is within this tolerance of 1 + |signal|, so a large loop signal needs a smaller value for the same absolute accuracy. Enter a finite number greater than 0. An empty or invalid value is marked in the field and the run is refused with STIFF_SOLVER_INVALID_OPTION; nothing is clamped. A looser value converges in fewer iterations but leaves a larger loop error; a tighter value can use up the iteration limit and report ALGEBRAIC_LOOP_NOT_CONVERGED. This is the Simulink configuration parameter Algebraic loop solver tolerance. It is saved with the model and applies to every solver, because loops are solved under fixed- and variable-step solvers alike.",
+        "sources": [
+          "src/components/xbridges/XbridgesWorkspace.tsx"
+        ]
+      }
+    ],
+    "sources": [
+      "src/components/xbridges/XbridgesWorkspace.tsx"
+    ]
+  },
+  "live:components/xbridges/XbridgesWorkspace:2b7e9c5a10d4": {
+    "title": "Loop Iter. (algebraic loop iterations)",
+    "category": "Workspace Controls",
+    "description": "Newton iteration limit of the algebraic loop solver, shown in the X-Bridges toolbar beside the solver options (default 100). Enter a whole number of 1 or more; an invalid value is marked in the field and the run is refused. The Gauss-Seidel passes over the loop run first and are limited separately; when the Newton budget is used up before the loop meets its tolerance, the run stops with ALGEBRAIC_LOOP_NOT_CONVERGED naming the loop blocks and the last iterate is reported. Raise it only after checking that the loop converges slowly rather than diverging: loosen the tolerance, or break the loop with a Unit Delay whose sample time is an output step. This is the Simulink algebraic loop solver iteration limit; it is saved with the model and applies to every solver.",
+    "content": "Newton iteration limit of the algebraic loop solver, shown in the X-Bridges toolbar beside the solver options (default 100). Enter a whole number of 1 or more; an invalid value is marked in the field and the run is refused. The Gauss-Seidel passes over the loop run first and are limited separately; when the Newton budget is used up before the loop meets its tolerance, the run stops with ALGEBRAIC_LOOP_NOT_CONVERGED naming the loop blocks and the last iterate is reported. Raise it only after checking that the loop converges slowly rather than diverging: loosen the tolerance, or break the loop with a Unit Delay whose sample time is an output step. This is the Simulink algebraic loop solver iteration limit; it is saved with the model and applies to every solver.",
+    "sections": [
+      {
+        "id": "use",
+        "title": "Loop Iter. (algebraic loop iterations)",
+        "body": "Newton iteration limit of the algebraic loop solver, shown in the X-Bridges toolbar beside the solver options (default 100). Enter a whole number of 1 or more; an invalid value is marked in the field and the run is refused. The Gauss-Seidel passes over the loop run first and are limited separately; when the Newton budget is used up before the loop meets its tolerance, the run stops with ALGEBRAIC_LOOP_NOT_CONVERGED naming the loop blocks and the last iterate is reported. Raise it only after checking that the loop converges slowly rather than diverging: loosen the tolerance, or break the loop with a Unit Delay whose sample time is an output step. This is the Simulink algebraic loop solver iteration limit; it is saved with the model and applies to every solver.",
         "sources": [
           "src/components/xbridges/XbridgesWorkspace.tsx"
         ]
