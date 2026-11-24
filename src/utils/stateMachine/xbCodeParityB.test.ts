@@ -7,6 +7,15 @@
  *
  * ---------------------------------------------------------------------------------------------------------------------
  * FLOAT32 SEMANTICS (read from the code, not assumed)
+ *   ---------------------------------------------------------------------------------------------------------------------
+ *   XBV-434 / D20 CHANGED THE PROFILE HERE. The paragraphs below describe the profile at the time this file was written:
+ *   ONE rounding per signal write, equations in float64. That is the defect XBV-434 fixes, and it is why the tolerances in
+ *   this file were once the interesting question. The target profile (plan 2026-11-24 section A, acceptance in
+ *   xbFloat32Ops.test.ts) rounds after EVERY operation: `float` temporaries and float libm in the C, `Math.fround` between
+ *   operations in the interpreter. The numbers below are historical in their reasoning but the BOUNDS still hold and are
+ *   what stays asserted: non-libm blocks at 0 ULP, libm blocks at <= 1 ULP. Tightening a bound is WP-A2/A3 work and must not
+ *   be done here.
+ *   ---------------------------------------------------------------------------------------------------------------------
  *   A signal has numericType float32 when its port carries dataType 'float32' (xbSemanticBuilder numericTypeFrom, 'single' /
  *   'float' / 'float32' strings and { kind: 'float', precision: 'float32' }), or when it inherits it from the driving signal
  *   (resolveNumericType); an unresolved signal defaults to float32 as well.
@@ -21,7 +30,7 @@
  *     write, equations in float64. Exception found while writing this file: the KALMAN_FILTER interpreter stores its state
  *     (x, P) unrounded in float64 (xbInterpreter.ts:~1750 assigns runtime.stateSlots without convertValue) while C stores
  *     them in float; that is the one kind of disagreement, see the KALMAN_FILTER case below.
- *   Tolerances (derived per kind of computation, never fitted to a result):
+ *   Tolerances (derived per kind of computation, never fitted to a result) — UNCHANGED BY XBV-434, see the note above:
  *     - block WITHOUT a libm call of its own (decided per block type from the C it emits: the libm calls of its model minus
  *       those of the baseline models Constant -> GAIN and the WaveformGen stimulus, so a sine stimulus does not make GAIN a
  *       libm block): both sides evaluate the same IEEE double operations in the same order on identical float32-rounded

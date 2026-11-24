@@ -136,6 +136,12 @@
    "date": "2026-11-24",
    "topic": "XBV-417 algebraic loop options in the canvas",
    "decision": "The algebraic loop solver tolerance and Newton iteration limit are exposed in the X-Bridges toolbar (Loop Tol / Loop Iter.) with the Simulink defaults 1e-6 and 100, passed to the engine for every solver (a loop is solved at each major step, fixed or variable step), refused before a run with STIFF_SOLVER_INVALID_OPTION when invalid, never clamped, and saved with the model under the engine option names algTol / maxIter. This follows Simulink, which lists the algebraic loop solver among its configuration parameters. Implemented in this pass; acceptance in xbSolversB.test.ts and the help entries in src/help/liveUiTopics.ts."
+  },
+  {
+   "id": "D23",
+   "date": "2026-11-24",
+   "topic": "XBV-434 float32 libm contract: interpreter = C at <= 1 ULP, sqrt exact",
+   "decision": "Measured, not assumed (32768 float32 arguments per function, gcc 12 -O2, glibc 2.36 builtins so no FMA contraction): fround(Math.fn(x)) differs from the C float function on 326/32768 arguments for sinf, 532 cosf, 24 expf, 110 logf, 2654 powf, 1214 atanf, 2480 asinf and 8756 tanhf (tanh by up to 2 ULP), always by at most 1 float32 ULP; sqrtf is exact on every argument. Therefore the float32 libm contract is interpreter = generated C at <= 1 float32 ULP for sin/cos/exp/log/pow/atan/asin/tanh, and 0 ULP for sqrt. A 0-ULP libm contract would need a float-libm shim that reproduces glibc bit for bit (a table or a port of its algorithms); that is explicitly NOT taken here. Math.pow is not an oracle for powf. Pinned in xbFloat32Ops.test.ts (SIN at x = -1.807373046875, where sinf and (float)sin differ by one ULP)."
   }
  ],
  "wps": [
