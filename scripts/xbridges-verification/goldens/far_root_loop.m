@@ -9,6 +9,14 @@ function far_root_loop()
 %   This script records, per case, whether Simulink converges from zero, with which error identifier it fails when it does
 %   not, and what a start at 0.9 x root does (the start sensitivity).
 %
+%   NOT VERIFIED (written without MATLAB; check on the first run, the .meta.json records what get_param reads back)
+%   - set_param 'AlgebraicLoopSolver' with 'TrustRegion' / 'LineSearch', and 'AlgebraicLoopMsg' = 'none'
+%   - 'SolverType' = 'Variable-step'; stop time 0 with ode45 and no continuous states (Simulink may switch to discrete)
+%   - block 'simulink/Signal Attributes/IC' ('Value'), and above all whether an IC on one feedback branch is taken as the
+%     loop's initial guess: if the 0.9 x root rows equal the zero-start rows, it was not
+%   - To Workspace 'SaveFormat' = 'Array', read back with simOut.get('golden_y')
+%   - Sum 'Inputs' '++-' / '+++', Product 'Inputs' '**', Gain 'Gain', Constant 'Value' (standard, but not run here)
+%
 %   WHAT IT RUNS
 %   The 12 cases of xbEngineB.test.ts describe 'e' (c and k are copied from CASES there, not invented):
 %       root 1e3  : c = 1,    k = 1e-6        root 1e7 : c = 1, k = 1e-14      root 1e8 : c = 1, k = 1e-16
