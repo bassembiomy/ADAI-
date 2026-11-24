@@ -12,10 +12,11 @@ fix every finding (WP-21) in the engine, following Simulink / Embedded Coder sem
 
 State at writing: 25 of 29 work packages done, 7 findings open.
 
-State on 2026-11-24: 26 of 29 work packages done, 4 findings open (XBV-419, XBV-420, XBV-434, XBV-436).
-§4.1 is done (four gap tests, each mutant killed by hand), §4.3 XBV-417 is done (option A, the UI fields),
-and §4.2 / §4.3 XBV-434 are decided in principle but not implemented (decisions D21 and D20, both OPEN).
-Section 6 records what is left and the measured effort.
+State on 2026-11-24 (WP-23 closed): 28 of 29 work packages done; only WP-15 is left
+(`waiting_matlab`). 4 findings open and every one of them has a recorded decision: XBV-419 / XBV-420 (waiting on
+the MATLAB goldens, D4), XBV-434 (D20, option A, a separate 1-2 day batch) and XBV-436 (D21, open after a second
+measured investigation). §4.1, §4.3 XBV-417 and the whole of §4.5 are done. Section 6 records what is left and the
+measured effort.
 
 ## 2. How the work is run (keep this loop)
 
@@ -174,18 +175,31 @@ A full mutation rerun does not fit a session on this machine: the unmutated base
 505-660 s, which sets a ~1500-2000 s timeout per mutant, so 22 mutants need 10-12 h. The four real gaps are rerun
 with `npx tsx scripts/xbridges-verification/mutationRun.ts --only=8,10,12,15`.
 
-## 6. What is left (as of 2026-11-24)
+## 6. What is left (as of 2026-11-24, WP-23 closed)
 
-1. **XBV-436 (D21, about half a day).** Make the Newton globalisation scale-invariant, as recorded in D21. The scaled
-   (column-equilibrated) direction alone is not enough: it must be combined with a line search that still accepts a
-   step in the scaled variables, and acceptance for both wirings at roots 1e9 and 1e10 must be added to
-   `xbEngineB.test.ts` while the XBV-431 cases (roots up to 1e8) stay green. Expect 3-4 iterations of
-   fix -> run `xbEngine.test.ts` + `xbEngineB.test.ts` + `algebraicLoops.test.ts` -> inspect the far-root cases.
-2. **XBV-434 (D20, 1-2 days).** Per-operation float32 in the interpreter and the generated C. Write the acceptance
-   first (Sum 16777216 + 1 + 1, Product / MatrixMultiply / filter / integrator accumulation, `sinf` against
-   `(float)sin`, the same through the generated C harness), then change the C generator to carry float temporaries,
-   then the interpreter's multi-operation blocks. Do not land it half-way: the interpreter and the generated C must
-   agree, which is the whole point of the finding.
-3. **4.5 close-out.** Set WP-21 and WP-23 to done, regenerate `report.md`, run the three gates
-   (`test:xbridges`, `test:help`, `tsc`) and push to `automative`.
-4. **WP-15 / XBV-419 / XBV-420** stay open until MATLAB is installed.
+Nothing in this document is left undone inside this session's scope: the work packages are 28 of 29 done and the
+remaining three findings each have a decision with its own batch. What is left, in the order it could be picked up:
+
+1. **XBV-436 (D21, 1-2 days).** The far algebraic-loop roots: y = c + y -/+ k y^2 from a zero start reaches the root up
+   to 1e8 in both wirings, fails in one wiring at 1e9 and 1e10, and fails in both for y = 1e-3 + 1e-20 y^2 (3.16e8).
+   All failures are honest fatals. Measured cause: at the zero start the y^2 column of the Jacobian is pure rounding
+   (+-1e-12 for one wiring, +-1e-20 for the other), the step is 1e12-1e19 times the iterate, no line search accepts it,
+   and the absolute-residual test that then rescues the 1e8 cases cannot move once the raw component reaches 1e20.
+   Nine candidate fixes were implemented and measured this pass (column equilibration, relative-residual merit, scaled
+   natural-monotonicity norms, a trust radius, retrying Newton after the damped phase, perturbation-first, a perturbation
+   cap, forced Levenberg-Marquardt, a trust-region LM phase): two fix only the '++-' wiring, the rest regress cases that
+   pass today, and all were reverted. What is left is a redesigned globalisation - a properly normed least-squares or
+   trust-region formulation, or NLEQ-ERR implemented exactly as published - developed against the 14-case matrix in D21
+   with the XBV-431 cases (roots up to 1e8, both wirings) kept green, and acceptance for the new cases added to
+   `xbEngineB.test.ts`.
+2. **XBV-434 (D20, 1-2 days).** Per-operation float32 in the interpreter and the generated C: acceptance first (Sum
+   16777216 + 1 + 1 = 16777216; float accumulation in Product, MatrixMultiply, the filters and the integrator; `sinf`
+   against `(float)sin`; the same through the generated C harness), then float temporaries in the C generator, then the
+   interpreter's multi-operation blocks. Do not land it half-way: the interpreter and the generated C must agree.
+3. **WP-15 / XBV-419 / XBV-420** stay open until MATLAB is installed; gate G stays `pending` for every block (D4).
+4. **Every future fix** still runs the loop of §2 (acceptance, executor, verifier, merge) and the three gates of §2.6,
+   and keeps `report.md` regenerated with `npm run -s xbv:report`.
+
+Measured on 2026-11-24 for the close-out itself: help entries for the differences from Simulink and the solver pane
+(one commit, `test:help` 114, `help:coverage` 2211/2211), the report template that still said "no fix has been made",
+`test:xbridges` (5386 passed, 45 failures that are all the absent clang of this machine), and this handoff.
