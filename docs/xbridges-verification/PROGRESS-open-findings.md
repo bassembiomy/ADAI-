@@ -1,6 +1,7 @@
 # X-Bridges open findings — progress and resume sheet
 
-**Read this file first when you continue in a new session.** It is updated after every step of this work, and the
+**Read this file first when you continue in a new session.** A one-page summary of what is left is in
+`docs/xbridges-verification/REMAINING-WORK.md`. It is updated after every step of this work, and the
 updates are committed and pushed together with the work they describe. Detailed plans:
 `docs/superpowers/plans/2026-11-24-xbridges-open-findings.md` (all findings) and
 **`docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md`** (the current one: XBV-439, then XBV-434). Finding and decision records:
@@ -113,6 +114,13 @@ Follow its "Order" table. Each step's brief, its files and its acceptance are in
 ---
 
 ## Log (newest first)
+
+- **2026-11-25 merged into `automative` at the user's request** (`dbac07b2`; its tree is identical to the arena
+  branch at `701f3701`).
+  - **Now on `automative`:** XBV-436 fixed, the XBV-434 acceptance, the Simulink golden scripts, and the plans.
+  - **Not green:** `automative` now carries the **8 failing XBV-434 acceptance tests** in `xbFloat32Ops.test.ts`.
+    Everything else passed in the last full run (5543 passed at `95fbb387`). They turn green with Part 2 of the
+    2026-11-25 plan.
 
 - **2026-11-25 implementation plan written** (`2026-11-25-xbv434-xbv439-implementation.md`).
   - **XBV-439 measured:** `algMaxPasses` 0 or 1 → correct not-converged; ≥ 2 → false root 3e-12 after 3 loop
