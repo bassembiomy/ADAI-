@@ -1,6 +1,7 @@
 # X-Bridges open findings — progress and resume sheet
 
-**Read this file first when you continue in a new session.** It is updated after every step of this work, and the
+**Read this file first when you continue in a new session.** A one-page summary of what is left is in
+`docs/xbridges-verification/REMAINING-WORK.md`. It is updated after every step of this work, and the
 updates are committed and pushed together with the work they describe. Detailed plans:
 `docs/superpowers/plans/2026-11-24-xbridges-open-findings.md` (all findings) and
 **`docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md`** (the current one: XBV-439, then XBV-434). Finding and decision records:
