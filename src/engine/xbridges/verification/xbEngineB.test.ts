@@ -241,6 +241,159 @@ describe('1. algebraic loop tolerance and iteration limit', () => {
       expect(Math.abs(r.y - 6)).toBeLessThanOrEqual(1e-6 * 7);
     });
   });
+
+  // -------------------------------------------------------------------------------------------------------------------
+  // e. XBV-436 (D21): the far-root matrix, both wirings of the same equation
+  // -------------------------------------------------------------------------------------------------------------------
+  //
+  // y = c + y - k y^2  (wiring 'minus': Sum '++-' with Gain +k on the squared term)
+  // y = c + y + (-k) y^2 (wiring 'plus': Sum '+++' with Gain -k) -- the same equation, drawn differently, so the result
+  // must not depend on the drawing. The non-zero root is y* = sqrt(c / k); the other root is 0.
+  //
+  // ORACLE: the closed form sqrt(c/k), tolerance algTol * (1 + |y*|) with the default algTol 1e-6. Never the engine's own
+  // previous output.
+  //
+  // MEASURED BASELINE (2026-11-24, before the WP-B3 fix; `evals` counts GAIN evaluations, the loop is solved once per
+  // call so the count is ~2x the per-solve number -- the BUDGET below is set from these numbers, not from a guess):
+  //
+  //   root       c      k        'minus'                 'plus'
+  //   1e3        1      1e-6     converges,    150 evals  converges,    150 evals
+  //   1e7        1      1e-14    converges,    429        converges,    423
+  //   1e8        1      1e-16    converges,    446        converges,    446
+  //   3.16e8     1e-3   1e-20    FAILS (fatal)          FAILS (fatal)      <- XBV-436
+  //   1e9        1      1e-18    converges,    464        FAILS (fatal)      <- XBV-436
+  //   1e10       1      1e-20    converges,    505        FAILS (fatal)      <- XBV-436
+  //
+  // So 4 of the 12 root cases fail today, all with ALGEBRAIC_LOOP_NOT_CONVERGED (an honest fatal, never a false root).
+  // Those 4 are the acceptance: they must converge to y* within algTol. The other 8 are regression guards and must stay
+  // green. Shapes that have no root, and a slow loop under a small maxIter, must stay fatal.
+  describe('e. XBV-436: far roots from a zero start, both wirings, one evaluation budget', () => {
+    /** The same equation drawn two ways (see the header). */
+    const ckLoop = (c: number, k: number, wiring: 'minus' | 'plus'): ModelSpec => ({
+      blocks: [
+        { id: 'one', type: 'Constant', params: { value: c } },
+        { id: 's', type: 'Sum', params: { signs: wiring === 'minus' ? '++-' : '+++' } },
+        { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } },
+        { id: 'gk', type: 'GAIN', params: { gain: wiring === 'minus' ? k : -k } },
+      ],
+      wires: ['one.out -> s.in1', 's.out -> s.in2', 's.out -> p.in1', 's.out -> p.in2', 'p.y -> gk.u', 'gk.y -> s.in3'],
+    });
+
+    /**
+     * One budget for every case, from the baseline above: 4 x the largest converging count measured today (505) rounded
+     * up. A solver that buys convergence with a huge iteration count fails here.
+     */
+    const EVAL_BUDGET = 4 * 505;
+
+    /** Run the loop once and count how many times the loop's GAIN is evaluated (a proxy for loop evaluations). */
+    const probe = (spec: ModelSpec, opts: Record<string, unknown> = {}) => {
+      const model = buildModel(spec);
+      // buildModel keeps the live block objects in `blocks`; wrap the GAIN so every loop evaluation is counted.
+      const blocks = (model as unknown as { blocks: { id: string; type: string; execute: (...a: unknown[]) => unknown }[] }).blocks;
+      const gain = blocks.find((b) => b.id === 'gk') ?? blocks.find((b) => b.type === 'GAIN');
+      let evals = 0;
+      if (gain) {
+        const inner = gain.execute.bind(gain);
+        gain.execute = (...args: unknown[]) => { evals++; return inner(...args); };
+      }
+      const e = new XbridgesEngine(model);
+      e.options = { solver: 'rk4', fixedStep: 0.1, startTime: 0, stopTime: 0.5, ...opts } as never;
+      const compile = e.compile(0);
+      e.computeOutputs(0);
+      return {
+        y: Number(e.getSignalValue('s', 'out')),
+        codes: codes([...compile, ...e.diagnostics]),
+        fatal: e.hasFatalError(),
+        evals,
+      };
+    };
+
+    // root, c, k. The root is written as the closed form so the table and the oracle cannot drift apart.
+    const CASES: [number, number, number][] = [
+      [1e3, 1, 1e-6],
+      [1e7, 1, 1e-14],
+      [1e8, 1, 1e-16],
+      [Math.sqrt(1e-3 / 1e-20), 1e-3, 1e-20], // 3.16e8
+      [1e9, 1, 1e-18],
+      [1e10, 1, 1e-20],
+    ];
+
+    it('the case table and the closed form agree (the oracle is written, not measured)', () => {
+      for (const [root, c, k] of CASES) expect(Math.sqrt(c / k)).toBeCloseTo(root, 6);
+      expect(CASES.map((c) => c[0])).toEqual([1e3, 1e7, 1e8, 316227766.01683795, 1e9, 1e10]);
+    });
+
+    // RESOLUTION FLOOR (review 2026-11-24, measured): the Sum adds c - k y^2 to y ~ root, so a y that is delta off the root
+    // changes the Sum output by about 2 c delta / root, which is lost below half an ulp of y when |delta| < root ulp(root) / (4 c).
+    // Every y in that band is an exact floating-point fixed point of the loop, so no solver that sees only the loop can tell
+    // them apart. Bound used: max(algTol (1 + root), root ulp(root) / (2 c)), twice the half-band. It is derived, not fitted,
+    // and it only changes the 3.16e8 case (band 9.4e3 against 316; measured exact fixed points from root - 6700 to
+    // root + 2650). Every other case keeps algTol (1 + root).
+    const ulpOf = (x: number) => { const a = Math.abs(x); const e = Math.floor(Math.log2(a)); return 2 ** (e - 52); };
+    const resolvable = (root: number, c: number) => Math.max(1e-6 * (1 + root), (root * ulpOf(root)) / (2 * c));
+    it('the resolution floor is above algTol only for the root-3.16e8 case', () => {
+      expect(CASES.filter(([root, c]) => resolvable(root, c) > 1e-6 * (1 + root)).map((x) => x[0])).toEqual([316227766.01683795]);
+    });
+
+    for (const [root, c, k] of CASES) {
+      for (const wiring of ['minus', 'plus'] as const) {
+        it(`y = ${c} + y ${wiring === 'minus' ? '-' : '+'} ${k} y^2 (root ${root.toPrecision(6)}), wiring '${wiring}': converges to the closed form within algTol (or the resolution floor), no error, within ${EVAL_BUDGET} evaluations`, () => {
+          const r = probe(ckLoop(c, k, wiring));
+          expect(r.codes.filter((x) => x === 'ALGEBRAIC_LOOP_NOT_CONVERGED'), `engine said ${r.codes.join(', ')} with y = ${r.y}`).toEqual([]);
+          expect(r.fatal).toBe(false);
+          expect(Math.abs(r.y - root), `s.out = ${r.y}, root = ${root}`).toBeLessThanOrEqual(resolvable(root, c));
+          expect(r.evals, 'loop evaluations').toBeLessThanOrEqual(EVAL_BUDGET);
+        });
+      }
+    }
+
+    it('the two wirings of the same equation give the same root (within algTol, or the resolution floor): the result must not depend on the drawing', () => {
+      for (const [root, c, k] of CASES.slice(0, 4)) {
+        const a = probe(ckLoop(c, k, 'minus'));
+        const b = probe(ckLoop(c, k, 'plus'));
+        expect(Math.abs(a.y - b.y), `root ${root}: ${a.y} vs ${b.y}`).toBeLessThanOrEqual(2 * resolvable(root, c)); // each within its own bound
+      }
+    });
+
+    it('y = 1 + y + y^2 has no real root: fatal ALGEBRAIC_LOOP_NOT_CONVERGED, never a false root', () => {
+      const r = probe({
+        blocks: [
+          { id: 'one', type: 'Constant', params: { value: 1 } },
+          { id: 's', type: 'Sum', params: { signs: '+++' } },
+          { id: 'p', type: 'PRODUCT', params: { numInputs: 2 } },
+        ],
+        wires: ['one.out -> s.in1', 's.out -> s.in2', 's.out -> p.in1', 's.out -> p.in2', 'p.y -> s.in3'],
+      });
+      expect(r.codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      expect(r.fatal).toBe(true);
+    });
+
+    it('a slow loop under maxIter = 3 stays fatal (the budget still means something)', () => {
+      // the same model the maxIter observability cases use: a triple product in the loop, needing far more than 3 steps
+      const slow: ModelSpec = {
+        blocks: [
+          { id: 'c', type: 'Constant', params: { value: 0.5 } },
+          { id: 's1', type: 'Sum', params: { signs: '+-' } },
+          { id: 'p', type: 'PRODUCT', params: { numInputs: 3 } },
+          { id: 's2', type: 'Sum', params: { signs: '+-' } },
+        ],
+        wires: ['s2.out -> s1.in1', 'c.out -> s1.in2', 's1.out -> p.in1', 's1.out -> p.in2', 's1.out -> p.in3', 's2.out -> s2.in1', 'p.y -> s2.in2'],
+      };
+      expect(solve(slow, { maxIter: 3 }).codes).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      expect(solve(slow, { maxIter: 100 }).codes).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+    });
+
+    it('the XBV-431 cases (roots up to 1e8) stay green and stay cheap', () => {
+      // the region that works today, restated here so a new globalisation cannot regress it silently
+      for (const [c, k] of [[1, 1e-14], [1, 1e-16], [1e12, 1], [1e-6, 1e-12]] as const) {
+        for (const wiring of ['minus', 'plus'] as const) {
+          const r = probe(ckLoop(c, k, wiring));
+          expect(r.codes, `c = ${c}, k = ${k}, ${wiring}`).not.toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+          expect(r.evals).toBeLessThanOrEqual(EVAL_BUDGET);
+        }
+      }
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
