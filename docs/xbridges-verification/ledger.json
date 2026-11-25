@@ -2999,7 +2999,7 @@
    "severity": "S3",
    "gate": "V4",
    "status": "open",
-   "summary": "Found by the WP-B3 verifier (2026-11-24), present before WP-B3: y = y + 1e-12 (y^2 + 1) has no real root, yet the Gauss-Seidel pre-pass of solveAlgebraicLoopCore accepts y = 3e-12 as converged (both the engine before and after WP-B3, algTol 1e-6 and 1e-3); the pass stops on a small change, not on the XBV-421 solution test. With the pre-pass off the WP-B3 engine reports ALGEBRAIC_LOOP_NOT_CONVERGED. Fix: the pre-pass may only accept a point that passes the same solution test as Newton. Probe: scratchpad probe.mts of the WP-B3 verification; acceptance to be written."
+   "summary": "Found by the WP-B3 verifier (2026-11-24), present before WP-B3: y = y + 1e-12 (y^2 + 1) has no real root, yet the engine accepts y = 3e-12 with no error. Measured 2026-11-25: algMaxPasses 0 or 1 -> ALGEBRAIC_LOOP_NOT_CONVERGED (correct); algMaxPasses >= 2 -> false root after exactly three loop evaluations. The rate-estimate branch is NOT the cause (q = 1 - 1e-12 gives an estimated error of about 1, far above algTol); the accepting branch is still to be located. Plan: docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md part 1 (diagnose, then every warm-up acceptance outside a clear contraction must pass the main solver's solution test, D25)."
   }
  ],
  "blocks": {

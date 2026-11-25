@@ -1,14 +1,15 @@
 # X-Bridges open findings — progress and resume sheet
 
 **Read this file first when you continue in a new session.** It is updated after every step of this work, and the
-updates are committed and pushed together with the work they describe. Detailed plan:
-`docs/superpowers/plans/2026-11-24-xbridges-open-findings.md`. Finding and decision records:
+updates are committed and pushed together with the work they describe. Detailed plans:
+`docs/superpowers/plans/2026-11-24-xbridges-open-findings.md` (all findings) and
+**`docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md`** (the current one: XBV-439, then XBV-434). Finding and decision records:
 `docs/xbridges-verification/ledger.json`. The human-readable report is `report.md`; regenerate it with
 `npm run -s xbv:report`.
 
 - **Branch:** `arena/87db4611-adai`. Push only there. `automative` was merged at `55ed35a5` and must stay green, so
   merge into it only when every test passes (see "Merge rule").
-- **Last updated:** 2026-11-24, after `8ab47ec5` (XBV-436 fixed: `6b5f2875` + `95fbb387`).
+- **Last updated:** 2026-11-25. The implementation plan for XBV-434 and XBV-439 is written; no code started.
 
 ## How to run the work (roles — the user's standing instruction)
 
@@ -82,28 +83,20 @@ comparison tests run by themselves.
 
 ### 1. (done) WP-B3 / WP-B4 — XBV-436 fixed. See the log.
 
-### 2. WP-A2 + WP-A3 — float32 per operation (two Sonnet executors in parallel, different files)
+### 2. Current plan: `docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md`
 
-- **A2 (generator):** in `src/utils/stateMachine/xbCGenerator.ts`, use `float` temporaries, `f` literals and float
-  libm for float32 blocks. `SM_XB_ConvertFloat32` stays only for conversions from other types. Compile with
-  `-Wdouble-promotion -Wfloat-conversion -Werror` under gcc and clang.
-- **A3 (interpreter):** add `Math.fround` between operations in the 19 multi-op blocks of `float32-inventory.md`
-  (`src/engine/xbridges/BlockDefinitions.ts` and the state-machine interpreter `src/utils/stateMachine/xbInterpreter.ts`).
-  The libm contract is D23: interpreter = C within 1 float32 ULP, and sqrt exact.
-- **Acceptance:** `xbFloat32Ops.test.ts` all green, and `xbCodeParityB` V7B-1 still 0 ULP for the non-libm blocks.
-- **Merge both together.** The interpreter and the C must agree at every merge.
+Follow its "Order" table. Each step's brief, its files and its acceptance are in that document. In short:
 
-### 3. WP-A4, WP-A5 — close-out of XBV-434, and XBV-439
-
-**XBV-439** (Gauss-Seidel pre-pass false root):
-- Write the acceptance first: y = y + 1e-12 (y² + 1) must be `ALGEBRAIC_LOOP_NOT_CONVERGED`.
-- Then the pre-pass may only accept a point that passes the same XBV-421 solution test as Newton.
-- Edit only `solveAlgebraicLoopCore`. Every loop test must stay green.
-
-**XBV-434 close-out:**
-
-Each close-out: remaining blocks, help text, the ledger set to `fixed` with the commits, `xbv:report`, the full gates,
-then merge into `automative`.
+1. **XBV-439** (Part 1). 439a acceptance (Opus) → 439b diagnose and fix (Sonnet) → 439c verify (Opus verifier).
+   Probe: `npx tsx scripts/xbridges-verification/xbv439Probe.ts`; today `algMaxPasses` ≥ 2 gives the false root
+   y = 3e-12. The accepting branch is **not yet located**: the rate-estimate branch was ruled out by measurement.
+2. **XBV-434** (Part 2).
+   - **Decisions and acceptance correction:** D26 (compute type, filters, operation order, `FLT_EVAL_METHOD` /
+     FP-contract, libm bounds), then A1b. A1b corrects the acceptance first: the libm sweep's 0-ULP assertion and the
+     V7B-1 libm bound would fail after a correct fix, because `tanhf` is 2 ULP from `Math.tanh`.
+   - **Implementation:** A2 generator ‖ A3 interpreter (two Sonnet executors in parallel, disjoint files), merged
+     together after the verifier's PASS.
+   - **Close-out:** A4 remaining blocks (Haiku), then A5 close-out and merge into `automative`.
 
 ### 4. After MATLAB — WP-C2 to WP-C4 and the zero-start question for XBV-436
 
@@ -120,6 +113,17 @@ then merge into `automative`.
 ---
 
 ## Log (newest first)
+
+- **2026-11-25 implementation plan written** (`2026-11-25-xbv434-xbv439-implementation.md`).
+  - **XBV-439 measured:** `algMaxPasses` 0 or 1 → correct not-converged; ≥ 2 → false root 3e-12 after 3 loop
+    evaluations.
+  - **Hypothesis refuted:** the controller's first guess (the rate estimate fooled by q ≈ 1) was ruled out with
+    numbers: the estimated error is about 1. The ledger entry XBV-439 is corrected.
+  - **Probe** committed as `scripts/xbridges-verification/xbv439Probe.ts`.
+  - **XBV-434 read from the code:** float32 signals are stored as `float` in C but read as `(double)` (xbCGenerator
+    ~594 / ~722), so every expression runs in double. The interpreter rounds only in `writeSignal`.
+  - **Two acceptance flaws found** that would fail a correct fix (the libm 0-ULP sweep, the V7B-1 tanh bound). They
+    are corrected in step A1b.
 
 - **2026-11-24 `95fbb387` + ledger: XBV-436 fixed, D21 closed.**
   - **The fix:** a one-sided finite difference restored where the central stencil is non-finite.
