@@ -58,7 +58,9 @@ The branch holds acceptance tests that fail **on purpose** until the fix lands. 
 | XBV-436 far loop roots | WP-B1 acceptance | done (5 failing by design) | `6852e9a0`; resolution floor for root 3.16e8 in `ec9130e9` |
 | | WP-B2 lab | **done: NLEQ-ERR green 12/12 from zero, worst 613 evaluations** | `ec9130e9`, D24 revised; the first verdict ("cannot work") was a lab defect |
 | | WP-B3 port NLEQ-ERR into the engine | **done** | `6b5f2875` port; verifier FAIL on loops undefined on one side → acceptance `827e80ed`, fix `95fbb387` |
-| XBV-439 Gauss-Seidel pre-pass false root | new, found by the WP-B3 verifier, older than WP-B3 | open, to plan | ledger XBV-439 |
+| XBV-439 Gauss-Seidel pre-pass false root | WP-439a acceptance, 439b fix, 439c verify | **done — fixed, D25 recorded** | acceptance `f8b6596d`, `1d6f4d23`; fix `2fc4ed13`; verifier PASS |
+| XBV-440 stale feed-forward between two loops of one cycle set (S2) | new, found by the WP-439b verifier, older than XBV-439 | open, to plan | ledger XBV-440 |
+| XBV-434 float32 (WP-A1b to A5) | running in a cloud session on branch `xbv434-float32` (this PC has no gcc/clang) | in progress | — |
 | | WP-B4 close-out | **done — XBV-436 fixed, D21 closed** | ledger + report; the Simulink zero-start comparison still waits for MATLAB |
 | | Simulink check of the zero start | script ready, waiting for MATLAB | `06becad6`, `901670c3`: `far_root_loop.m`, `xbGoldenLoop.test.ts` |
 | XBV-419 / 420 tangent touch | WP-C1 script, WP-C3 harness | done | `c96efcfa`: `tangent_touch.m`, `xbGoldenTangent.test.ts` (24 named skips) |
@@ -114,6 +116,20 @@ Follow its "Order" table. Each step's brief, its files and its acceptance are in
 ---
 
 ## Log (newest first)
+
+- **2026-11-26 XBV-439 fixed (`2fc4ed13`), D25 recorded, XBV-440 filed.**
+  - **Cause:** the rate estimate at pass 1 measured q across different loop values settling (pass 0 moves p and
+    s2, pass 1 moves only s by 1e-12), so q = 1e-12 was an artefact; not the q ~ 1 case.
+  - **First fix FAILED verification:** a max-norm rate is fooled when the drift sits next to a value that settles or
+    contracts. Acceptance extended (`1d6f4d23`, 20 cases); the rate is now measured per loop value (D25).
+  - **Results:** xbLoopWarmup 20/20; xbLoopDomain, xbEngineB, xbEngine, xbWp21Engine, xbLoopOptions, xbSolversB,
+    xbDiagnostics, xbWp21Blocks + motor 726/726; tsc clean; probe 6/6 not converged. Verifier PASS, 100+ adversarial
+    probes old vs new, no new false root or newly unsolved case. Cost about +9 % test time on algebraicLoops +
+    wp31_evReference.
+  - **Machine note:** this Windows PC has no gcc/clang, so every C-compiling suite fails here for that reason only.
+    XBV-434 runs in a cloud session on branch `xbv434-float32`.
+  - **New XBV-440 (S2, pre-existing):** two loops in one cycle set joined by a feed-forward path outside
+    cycleBlocks; the second loop is solved with a stale 0 (5/3 instead of 168.33), no diagnostic.
 
 - **2026-11-25 merged into `automative` at the user's request** (`dbac07b2`; its tree is identical to the arena
   branch at `701f3701`).
