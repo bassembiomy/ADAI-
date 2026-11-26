@@ -781,7 +781,8 @@ export class XbridgesEngine {
     if (loopKeys.length === 0) return;
 
     // Gauss-Seidel passes (cycle blocks in order) before falling back to Newton.
-    const snapshot = () => loopKeys.map(lk => this.signalValues.get(`${lk.blockId}.${lk.portId}`));
+    const allKeys = loopKeys.slice(); // every loop output; loopKeys is narrowed to the numeric ones below (Newton)
+    const snapshot = () => allKeys.map(lk => this.signalValues.get(`${lk.blockId}.${lk.portId}`));
     const settledValue = (a: any, b: any): boolean => {
       if (typeof a === 'number' && typeof b === 'number') {
         if (a === b) return true;
@@ -820,33 +821,12 @@ export class XbridgesEngine {
       a.forEach((v, i) => visit(v, b[i]));
       return m;
     };
-    let prevChange = Infinity;
-    for (let pass = 0; pass < maxPasses; pass++) {
-      this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
-      const cur = snapshot();
-      // A diverged sweep (Infinity / NaN) is never a settled loop: Newton restarts from the pre-sweep values.
-      if (!cur.every(isFiniteValue)) break;
-      const change = sweepChange(cur, prev);
-      // Judge the solution, not the residual: for sweeps contracting by q the error left after this sweep is about
-      // change * q / (1 - q). A sweep that does not contract (q >= 1) is not settled unless the change is at rounding level.
-      const q = change / prevChange;
-      const solutionError = q < 1 ? (change * q) / (1 - q) : Infinity;
-      const settled = cur.every((v, i) => settledValue(v, prev[i]))
-        && (change === 0 || (pass >= 1 && change <= prevChange && (solutionError <= algTol || change <= 1e-14)));
-      prev = cur;
-      prevChange = change;
-      if (settled) return;
-    }
 
-    // Gauss-Seidel did not settle (it may be diverging): restart Newton from the pre-sweep values.
-    loopKeys.forEach((lk, i) => this.signalValues.set(`${lk.blockId}.${lk.portId}`, start[i]));
-
-    // Newton operates on plain numeric outputs only; others are left untouched.
-    const numericKeys = loopKeys.filter(lk => typeof this.signalValues.get(`${lk.blockId}.${lk.portId}`) === 'number');
+    // Newton operates on plain numeric outputs only (judged at the pre-sweep values); others are left untouched.
+    const numericKeys = allKeys.filter((_, i) => typeof start[i] === 'number');
     loopKeys.length = 0;
     loopKeys.push(...numericKeys);
     const n = loopKeys.length;
-    if (n === 0) return;
 
     const reportNotConverged = () => {
       this.fatal = true; // Simulink stops when an algebraic loop cannot be solved
@@ -1112,6 +1092,102 @@ export class XbridgesEngine {
       }
       return { converged: false, z }; // maxIter iterations did not reach algTol on the solution
     };
+
+    // Warm-up Gauss-Seidel passes (XBV-439, D25). No point leaves the passes without the acceptance of the main solver:
+    // only a clear contraction of EVERY moving component is accepted from the rate estimate (q_i <= Q_MAX per component,
+    // on two consecutive passes for the fast path, on the last pass for a rounding-level candidate; error estimate per
+    // component within algTol). The max-norm rate is meaningless while other loop values settle faster (the change then falls
+    // although one value keeps drifting at rate 1). Every other settled candidate (pass 0, change 0, a component with q_i > Q_MAX
+    // or unknown) must pass acceptedSolution (residual AND Newton correction) at that point; if it does not, Newton restarts from `start`.
+    const Q_MAX = 0.5;
+    const verifiedCandidate = (exactSweep: boolean): boolean => {
+      // An unchanged sweep over blocks that all really execute (no held sampled-output cache) already evaluated F at z and
+      // returned z exactly: nothing more to evaluate.
+      if (exactSweep && !this.cycleBlocks.some(b => this.sampleTimeOf(b) > 0)) return true;
+      const zb = getZ();
+      const fb = evaluateF(zb);
+      if (!finite(fb)) return false;
+      // A sweep that changed nothing and a loop function that returns every iterate exactly: g(z) = 0 exactly, so the Newton
+      // correction -J^-1 g is exactly 0 and needs no Jacobian (a Jacobian per solve costs 4n+1 loop evaluations).
+      if (exactSweep && zb.every((zi, i) => zi === fb[i])) return true;
+      const jac = jacobianOf(zb, fb);
+      if (!jac) return false;
+      const w = zb.map(v => 1 + Math.abs(v));
+      const rhs = residualOf(zb, fb).map(v => -v);
+      const dz = solveScaled(jac.J, rhs, w) ?? solveScaled(jac.raw, rhs, w);
+      if (!dz) return false; // a singular Jacobian cannot confirm the correction: leave it to NLEQ-ERR
+      return acceptedSolution(zb, dz);
+    };
+    const restore = (values: any[]) => allKeys.forEach((lk, i) => this.signalValues.set(`${lk.blockId}.${lk.portId}`, values[i]));
+    // Scaled change of every numeric leaf of the loop values (0 for an unchanged leaf; Infinity where the earlier value was not
+    // a number). The rate is judged PER COMPONENT: the max-norm change is dominated by the part that settles fastest, so a value
+    // that drifts at rate 1 next to one that contracts quickly would look like a contraction (D25, second amendment).
+    const leafChanges = (a: any[], b: any[]): number[] => {
+      const out: number[] = [];
+      const visit = (x: any, y: any) => {
+        if (typeof x === 'number') out.push(typeof y !== 'number' ? Infinity : x === y ? 0 : Math.abs(x - y) / (1 + Math.abs(y)));
+        else if (Array.isArray(x)) x.forEach((v, i) => visit(v, Array.isArray(y) ? y[i] : undefined));
+        else if (x && typeof x === 'object') Object.keys(x).forEach(k => visit(x[k], y && typeof y === 'object' ? y[k] : undefined));
+      };
+      a.forEach((v, i) => visit(v, b[i]));
+      return out;
+    };
+    // true when every component that moved this pass contracts with q_i = ch_i / prevCh_i <= Q_MAX and an error estimate
+    // ch_i q_i / (1 - q_i) within algTol; a component that moved with no earlier movement (prevCh_i = 0) or no earlier pass is unknown.
+    const contractsPerComponent = (ch: number[], prevCh: number[] | null): boolean => {
+      if (!prevCh || prevCh.length !== ch.length) return false;
+      for (let i = 0; i < ch.length; i++) {
+        if (ch[i] === 0) continue;
+        if (!(prevCh[i] > 0)) return false;
+        const qi = ch[i] / prevCh[i];
+        if (!(qi <= Q_MAX) || (ch[i] * qi) / (1 - qi) > algTol) return false;
+      }
+      return true;
+    };
+    let prevChange = Infinity;
+    let prevCh: number[] | null = null;
+    let prevContracts = false;
+    const MAX_DEFERRALS = 3;
+    let deferrals = 0;
+    for (let pass = 0; pass < maxPasses; pass++) {
+      this.cycleBlocks.forEach(b => this.executeBlockOrCache(b, time, tempStates));
+      const cur = snapshot();
+      // A diverged sweep (Infinity / NaN) is never a settled loop: Newton restarts from the pre-sweep values.
+      if (!cur.every(isFiniteValue)) break;
+      const change = sweepChange(cur, prev);
+      // Judge the solution, not the residual: for sweeps contracting by q the error left after this sweep is about
+      // change * q / (1 - q). A sweep that does not contract (q >= 1) is not settled unless the change is at rounding level.
+      const q = change / prevChange;
+      const solutionError = q < 1 ? (change * q) / (1 - q) : Infinity;
+      const settled = cur.every((v, i) => settledValue(v, prev[i]))
+        && (change === 0 || (pass >= 1 && change <= prevChange && (solutionError <= algTol || change <= 1e-14)));
+      // an unchanged sweep needs no per-component rates (it is never a contraction candidate; [] reads as unknown)
+      const ch = change > 0 ? leafChanges(cur, prev) : [];
+      const contractsNow = change > 0 && contractsPerComponent(ch, prevCh);
+      const fast = settled && change > 0 && pass >= 2 && contractsNow && prevContracts;
+      prev = cur;
+      prevChange = change;
+      prevCh = ch;
+      prevContracts = contractsNow;
+      if (fast) return;
+      // A clear contraction seen once (pass 1) has no second measurement yet: one more pass decides between fast path and check.
+      const awaitingSecondQ = settled && change > 0 && pass === 1 && contractsNow;
+      if (settled && !awaitingSecondQ) {
+        // Every moving component contracts on the last pass (q_i <= Q_MAX): no Jacobian verification. A drift without a root
+        // has q_i near 1 in its own component and still goes to the check; so do pass 0, change 0 and an unknown component.
+        const contracting = pass >= 1 && change > 0 && contractsNow;
+        if (contracting) { restore(cur); return; }
+        // A candidate that does not yet prove a contraction in every component (coupled values still settling) gets a few more
+        // cheap sweeps before it pays the Jacobian of the check; a drift without a root stays non-contracting and is checked.
+        if (change > 0 && deferrals < MAX_DEFERRALS && pass + 1 < maxPasses) { deferrals++; continue; }
+        if (verifiedCandidate(change === 0)) { restore(cur); return; }
+        break;
+      }
+    }
+
+    // Gauss-Seidel did not settle (it may be diverging) or its candidate failed the check: restart Newton from the pre-sweep values.
+    restore(start);
+    if (n === 0) return;
 
     const z0 = getZ();
     const res = nleqErr(z0);
