@@ -77,6 +77,50 @@ describe('XBV-439: a loop with no real root is never accepted by the warm-up pas
   }
 });
 
+/**
+ * WP-439b verifier (FAIL 1 and 2): a rate measured over ALL loop values is fooled when the drifting value sits next to a
+ * value that settles (or contracts) fast: the max-norm change is dominated by the settling part, so q looks small while
+ * y keeps drifting at rate 1. The second loop is disjoint, so the oracle is the same: y has no real root, whatever x does.
+ *  - saturated: x1 = 1 + sat(G x1), sat upper U; for G = 100, U = 60 it settles at x1 = 61 after two sweeps (hand:
+ *    pass 0 change 100, pass 1 change 59.4, q = 0.594; pass 2 change ~1e-12 from y alone).
+ *  - contracting: x = 1 + a x with a = 0.5.
+ */
+const withSaturatedLoop = (k: number, first: boolean): ModelSpec => {
+  const b = noRootLoop(k);
+  const extra = [
+    { id: 'sat', type: 'SATURATION', params: { lowerLimit: -1e12, upperLimit: 60 } }, { id: 'x1', type: 'Sum', params: { signs: '++' } },
+    { id: 'c1', type: 'Constant', params: { value: 1 } }, { id: 'x2', type: 'GAIN', params: { gain: 100 } },
+  ];
+  const w = ['x2.y -> sat.u', 'sat.y -> x1.in1', 'c1.out -> x1.in2', 'x1.out -> x2.u'];
+  return { blocks: first ? [...extra, ...b.blocks] : [...b.blocks, ...extra], wires: first ? [...w, ...b.wires] : [...b.wires, ...w] };
+};
+const withContractingLoop = (k: number, a: number): ModelSpec => {
+  const b = noRootLoop(k);
+  return {
+    blocks: [...b.blocks, { id: 'one', type: 'Constant', params: { value: 1 } }, { id: 'ga', type: 'GAIN', params: { gain: a } }, { id: 'x', type: 'Sum', params: { signs: '++' } }],
+    wires: [...b.wires, 'one.out -> x.in1', 'x.out -> ga.u', 'ga.y -> x.in2'],
+  };
+};
+
+describe('XBV-439: the drift is not hidden by another loop value that settles or contracts', () => {
+  for (const k of [1e-8, 1e-12, 1e-16]) {
+    for (const first of [true, false]) {
+      it(`y = y + ${k} (y^2 + 1) next to a saturated loop (${first ? 'first' : 'last'}): ALGEBRAIC_LOOP_NOT_CONVERGED`, () => {
+        const r = solveOnce(withSaturatedLoop(k, first), { algTol: 1e-6 });
+        expect(r.codes, `y = ${r.y}`).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+        expect(r.fatal).toBe(true);
+      });
+    }
+  }
+  for (const a of [0.5, 0.25]) {
+    it(`y = y + 1e-12 (y^2 + 1) next to x = 1 + ${a} x: ALGEBRAIC_LOOP_NOT_CONVERGED`, () => {
+      const r = solveOnce(withContractingLoop(1e-12, a), { algTol: 1e-6 });
+      expect(r.codes, `y = ${r.y}`).toContain('ALGEBRAIC_LOOP_NOT_CONVERGED');
+      expect(r.fatal).toBe(true);
+    });
+  }
+});
+
 describe('XBV-439: contractions are still solved, and cheaply', () => {
   it('y = 1 + 0.5 y -> 2, by the fast path (at most 30 loop evaluations)', () => {
     const r = solveOnce(linearLoop(0.5), { algTol: 1e-6 });
