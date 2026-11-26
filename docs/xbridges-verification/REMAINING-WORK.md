@@ -12,8 +12,9 @@ Related documents:
 
 | Document | Use it for |
 | --- | --- |
+| `docs/xbridges-verification/CHANGES-2026-11-24.md` | what changed on 2026-11-24 and how to test it |
 | `docs/xbridges-verification/PROGRESS-open-findings.md` | step-by-step state and log; start here in a new session |
-| `docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md` | the detailed plan for items 1 and 2 below (briefs, files, acceptance) |
+| `docs/superpowers/plans/2026-11-25-xbv434-xbv439-implementation.md` | the detailed plan: items 1 and 2 (Parts 1, 2), and the MATLAB follow-ups and final close-out (Part 3) |
 | `docs/superpowers/plans/2026-11-24-xbridges-open-findings.md` | the overall plan (sections A, B, C) |
 | `docs/xbridges-verification/ledger.json` → `report.md` | the findings and decisions of record (`npm run -s xbv:report`) |
 

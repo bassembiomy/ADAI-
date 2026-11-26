@@ -317,3 +317,109 @@ A2 and A3 merge **together** in one commit pair. The interpreter and the C must 
 | Simulink keeps a double accumulator in a filter | the Discrete Transfer Fcn golden case added to the MATLAB script; a documented difference if so |
 | The warm-up fix (XBV-439) slows every loop model | the "at most 30 evaluations" and "at most 3 passes on a warm start" guards in 439a; the +10 % timing gate |
 | A session ends mid-step | PROGRESS file: each step's state is logged and committed; uncommitted executor work is re-verified, not trusted |
+
+---
+
+# Part 3 — after Parts 1 and 2: the MATLAB follow-ups and the final close-out
+
+Added 2026-11-26. Parts 1 and 2 need nothing from the user. Part 3 starts when the user has MATLAB R2024b again
+(decision D4; WP-15 is `waiting_matlab`). Same roles as above.
+
+## WP-M0 — extend the MATLAB scripts before the user runs them (Opus, 1 h, no MATLAB needed)
+
+Do this first, so one MATLAB session produces every golden.
+
+1. **Filter accumulator.** Add a Discrete Transfer Fcn case with a `single` input to `scripts/xbridges-verification/goldens/`,
+   for example `filter_single.m`. It checks D26's assumption that Simulink filters accumulate in single. The output goes
+   to `docs/xbridges-verification/goldens/filter_single_*.csv` and `.meta.json`.
+2. **Division loop** (REMAINING-WORK item 5.1). Add `y = a/y + b` from a zero start to `far_root_loop.m`, to learn
+   whether Simulink also fails where F is infinite at the start point.
+3. Add a skipped-until-present harness case for each new output, in the style of `xbGoldenTangent.test.ts`: absent
+   files are skipped by name, never passed.
+4. Write one command, in `docs/xbridges-verification/goldens/README.md`, that runs every script in a single
+   `matlab -batch` call.
+
+**Acceptance:** the new test cases are listed as skipped with the file and command named; the full suite is
+unchanged otherwise.
+
+## WP-M1 — the user's MATLAB session (user, about 30 min)
+
+Run the single command from the README in the repository root, then commit the CSV and `.meta.json` files under
+`docs/xbridges-verification/goldens/`. Nothing else is needed from the user.
+
+## WP-M2 — XBV-419 and XBV-420: the touch-without-crossing rule (Opus acceptance, Sonnet fix, Opus verifier; ½ day)
+
+1. Run `xbGoldenTangent.test.ts`. Its 24 comparisons are now real. Read what Simulink did for:
+   - the Relay with switchOff 0 on u = (t−1)²;
+   - the Dead Zone [−1, 0] on the same input, with zero-crossing detection on (and off for reference), under
+     ode45, ode4 and ode23tb.
+2. Record the rule as decision D27: on a touch, Simulink either holds the mode or switches it.
+3. **If Simulink holds the mode on a touch:**
+   - Acceptance: the live loop must equal batch for the Relay (live currently switches because t = 1 is on the grid).
+     Flip the XBV-419 pins to match.
+   - Fix (Sonnet): live mode updates must use the same strict sign-change rule as `crossingBlock`
+     (`zeroCrossingGuard.ts`). Edit only `liveStep.ts` / `zeroCrossingGuard.ts`.
+   - XBV-420: the ode23tb Dead Zone error of 2.55e-4 on the touch must fall to the solver tolerance. Locate why
+     ode23tb differs from ode23 / ode45 there.
+4. **If Simulink switches on a touch:**
+   - Acceptance: batch must locate the touch as an event.
+   - Fix (Sonnet): event location in `zeroCrossingGuard.ts` / `AdaptiveSolver.ts` / `StiffSolver.ts`.
+   - Rewrite the mutant-15 test in `xbMutationGaps.test.ts` ("a touch is not a crossing"), because the rule it pins
+     changes.
+5. In both cases:
+   - remove "provisional" from the RELAY and DEADZONE entries in `src/help/blockGuidance.ts`;
+   - remove it from the solver-selector help in `scripts/help/buildUiHelpInventory.ts`, then regenerate
+     `src/help/uiFeatureTopics.ts` with that generator;
+   - keep `npm run -s help:coverage` and `test:help` green.
+6. Verifier PASS, merge, close XBV-419 and XBV-420.
+
+## WP-M3 — the far-root check and the filter case (Opus; 1–2 h)
+
+1. **`xbGoldenLoop.test.ts` against the far-root goldens.**
+   - If Simulink converges from zero, nothing changes.
+   - If it does not, record in D24 that ADIA is stricter than Simulink there. That is a documented difference, not a
+     defect, so add it to the help next to D21.
+2. **Division loop:**
+   - if Simulink solves it and ADIA does not, file a finding with acceptance first;
+   - if Simulink fails too, record it as a documented limitation.
+3. **Filter accumulator:**
+   - if Simulink keeps a double accumulator for a single filter, change D26 for filters with acceptance first (Part 2
+     risk table);
+   - otherwise nothing changes.
+
+## WP-M4 — final close-out (Opus + Haiku runs the gates; ½ day)
+
+Start only when Parts 1–2 are merged and WP-M2 / M3 are done, or when the user accepts leaving XBV-419 and XBV-420
+open.
+
+1. Ledger:
+   - WP-15 done, or still `waiting_matlab` with the reason;
+   - WP-21 done;
+   - every decision up to the last one recorded.
+2. `npm run -s xbv:report`. In the report:
+   - gate G per block: `pass` where a golden exists, `pending` elsewhere, with the list;
+   - the mutation score with its date. A rerun is optional; see REMAINING-WORK item 5.4: it takes 10–12 h and gives
+     at most 63.6 %.
+3. Help: every documented difference D9 to the last decision is attached to its block. `help:coverage` and
+   `test:help` are green.
+4. Gates:
+   - `npm run -s test:xbridges -- --exclude '.claude/**'` with 0 failures;
+   - `npm run -s test:help -- --exclude '.claude/**'`;
+   - `npx tsc --noEmit -p .`, with only the two known `xlsx` errors.
+5. Update `docs/xbridges-verification/REMAINING-WORK.md` to "nothing open" (or the accepted open items), log the end
+   in `PROGRESS-open-findings.md`, and push `automative`.
+
+## Order and estimates for the whole remaining work
+
+| Step | Needs the user? | Estimate |
+| --- | --- | --- |
+| Part 1, XBV-439 | no | ½ day |
+| Part 2, XBV-434 | no | about 2½ days |
+| WP-M0, extend the MATLAB scripts | no | 1 h |
+| WP-M1, MATLAB run | **yes (MATLAB R2024b)** | 30 min of the user's time |
+| WP-M2, XBV-419 / 420 | after WP-M1 | ½ day |
+| WP-M3, far root, division loop, filter | after WP-M1 | 1–2 h |
+| WP-M4, close-out | — | ½ day |
+
+**Total without MATLAB:** about 3½ days, leaving XBV-419 / 420 open. **With MATLAB:** about 4½ days plus the user's
+run.
